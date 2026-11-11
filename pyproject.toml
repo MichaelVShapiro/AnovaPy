@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "anovapy"
+version = "0.1"
+license = "MIT"
+license-files = ["LICENSE"]
+readme = "README.md"
+description = "A very lightweight Python library to be able to run One Way ANOVA, Two Way ANOVA, and MANOVA along with post-hoc tests and alternative tests when assumptions are not met."
+authors = [{ name = "Michael Shapiro" }]
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "scipy"
+]
+
+[project.urls]
+Homepage = "https://github.com/MichaelVShapiro/AnovaPy"
+Repository = "https://github.com/MichaelVShapiro/AnovaPy"
+
+[tool.setuptools.packages.find]
+where = ["."]   
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "statsmodels",
+    "scikit-bio",
+    "pingouin",
+    "ruff"
+]

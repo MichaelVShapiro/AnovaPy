@@ -1,0 +1,19 @@
+# ignore virtual environment
+virtual
+
+# ignore os files
+.DS_Store
+
+# ignore helper files
+tests/helper.md
+anovapy.egg-info
+
+# ignore cache
+
+**/__pycache__
+
+# py test stuff
+.pytest_cache
+
+# ruff cache
+.ruff_cache
