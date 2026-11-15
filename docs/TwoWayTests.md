@@ -216,3 +216,5 @@ twoway_res_auto = transform_and_run_twoway(
 Note that when `method` is left out, it will default to `log`.
 
 A word on `transform_and_run_twoway` and `transform_dependent`. Typically, after transforming the dependent variable, you would run a standard Two Way ANOVA test. You will notice in the code above how after calling `transform_dependent` we ran `f_twoway` automatically. `transform_and_run_twoway`, therefore, is literally just calling `transform_dependent` and then `f_twoway` right away.
+
+Besides that, after transforming your dependent variable you should **always** recheck your assumptions again before running a Two Way ANOVA!

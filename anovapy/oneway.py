@@ -12,13 +12,39 @@ import numpy as np
 from scipy.linalg import helmert
 from scipy.stats import f, norm, rankdata, ttest_rel
 
-__all__ = ["brown", "dunns", "f_repeated", "pairwise_ttest"]
+__all__ = ["brown", "dunns", "f_repeated", "pairwise_ttest", "f_ancova"]
 
 BrownResult = namedtuple("BrownResult", ["statistic", "pvalue"])
 RepeatedMeasuresAnovaResult = namedtuple(
     "RepeatedMeasuresAnovaResult", ["statistic", "pvalue"]
 )
 
+@dataclass
+class F_ancovaResult:
+    """
+    Result of `anovapy.oneway.f_ancova`.
+
+    Attributes
+    ----------
+    statistic : float
+        F-statistic for the independent factor
+    pvalue : float
+        Computed p-value for the independent factor
+    df_factor : int
+        Degrees of Freedom for Factor
+    df_error : int
+        Degrees of Freedom Error
+    covariate_stats : np.ndarray
+        1D array of F-statistics for each covariate passed in
+    covariate_pvalues : np.ndarray
+        1D array of p-values for each covariate passed in
+    """
+    statistic: float
+    pvalue: float
+    df_factor: int
+    df_error: int
+    covariate_stats: np.ndarray
+    covariate_pvalues: np.ndarray
 
 @dataclass
 class DunnsResult:
@@ -547,3 +573,169 @@ def pairwise_ttest(
         adjusted = pvals
 
     return AdjustedTTestResult(statistic=np.array(stats), pvalue=np.array(adjusted))
+
+def f_ancova(
+    independent: np.typing.ArrayLike,
+    dependent: np.typing.ArrayLike,
+    *covariates: np.typing.ArrayLike,
+    nan_policy: Literal['propagate', 'omit', 'raise'] = 'propagate'
+) -> F_ancovaResult:
+    """
+    Performs a One Way Analysis of Covariance (ANCOVA).
+
+    Parameters
+    ----------
+    independent : array_like
+        A 1D array representing a categorical variable. This *must* have at least two or more levels.
+    dependent : array_like
+        A 1D array representing a continuous dependent variable.
+    *covariates : array_like
+        At least one covariate. Each must be a 1D array
+    nan_policy : {'propagate', 'omit', 'raise'}
+        Defines how to handle input NaNs.
+    
+    Returns
+    -------
+    F_ancovaResult
+        A dataclass containing the F-statistic and p-value for the independent factor, along with degrees of freedom and computed F-statistic and p-value for each covariate passed in.
+    
+    Notes
+    -----
+    The general formula here is:
+
+    $Y_{ij} = u + T_i + B(X_{ij} - X) + e_{ij}$
+
+    where *Y_ij* is the dependent variable for the j-th individual in the i-th group, *u* is the grand mean, *T_i* is the fixed treatment effect for group i, *B* is the regression coefficient (slope) representing the linear relationship between the covariate and the dependent variable, *X_ij* is the value of the continuous covariate for the j-th individual in group i, *X* is the overall mean of the covariate, and *e_ij* is random error term, assumed to be normally distributed with mean zero.
+
+    Sometimes the formula above is shown in matrix multiplication, which can be represented as:
+
+    $Y = B_0 + B_1X + B_2C + e$
+
+    where *B_0* is the predicted Y for the reference group when all covariates = 0, *B_1* is first group dummy coefficient (or first covariate slope, depending on your column ordering), *X* is the design matrix shown above (not a single covariate — it's the entire matrix of predictors), and *B_2* is the covariate slope.
+
+    At the moment, this function strictly implements **Type II Sum of Squares.**
+
+    References
+    ----------
+    .. [1] Fisher, R. A. (1932). Statistical Methods for Research Workers (4th ed.). Edinburgh: Oliver & Boyd.
+    .. [2] Khammar A, Yarahmadi M, Madadizadeh F. What Is Analysis of Covariance (ANCOVA) and How to Correctly Report Its Results in Medical Research? Iran J Public Health. 2020 May;49(5):1016-1017. PMID: 32953697; PMCID: PMC7475615.
+    .. [3] Wikipedia Contributors. "Analysis of Covariance." Wikipedia, Wikimedia Foundation, 9 June 2019, https://en.wikipedia.org/wiki/Analysis_of_covariance. Accessed 12 Nov. 2026.
+    .. [4] Bobbitt, Zach. "An Introduction to ANCOVA (Analysis of Variance)." Statology, 19 May 2020, https://www.statology.org/ancova/. Accessed 13 Nov. 2026.
+    .. [5] Keller, Bryan, and Dobrin Marchev. Running Head: ANCOVA 1 Analysis of Covariance: Univariate and Multivariate Approaches Forthcoming in the International Encyclopedia of Education, 4Th Edition. 2022, http://www.columbia.edu/~bsk2131/Keller_Marchev_ANCOVA_R1.pdf. Accessed 12 Nov. 2026.
+    .. [6] NCSS, LLC. One-Way Analysis of Covariance (ANCOVA). Technical procedure guide, NCSS, LLC, 4 Oct. 2024, https://www.ncss.com/wp-content/themes/ncss/pdf/Procedures/NCSS/One-Way_Analysis_of_Covariance-ANCOVA.pdf. Accessed 12 Nov. 2026.
+    """
+    independent = np.asarray(independent)
+    dependent = np.asarray(dependent, dtype=float)
+    covariates = [np.asarray(c, dtype=float) for c in covariates]
+
+    # validate
+    if nan_policy not in {'propagate', 'omit', 'raise'}:
+        raise ValueError("nan_policy must be one of {'propagate', 'omit', 'raise'}.")
+
+    # handle nan
+    has_nan = np.isnan(dependent).any() or any([np.isnan(i).any() for i in covariates])
+    if has_nan:
+        if nan_policy == 'propagate':
+            return F_ancovaResult(
+                statistic=np.nan,
+                pvalue=np.nan,
+                df_factor=np.nan,
+                df_error=np.nan,
+                covariate_stats=np.array(np.nan),
+                covariate_pvalues=np.array(np.nan)
+            )
+        elif nan_policy == 'raise':
+            raise ValueError("Input contains NaN values.")
+        # omit
+    
+    # validate that independent variable has at least two levels
+    unique_groups = np.unique(independent)
+
+    if len(unique_groups) == 1:
+        raise ValueError("The independent variable must have at least two levels.")
+
+    # lets utilize the formula that involves matrix multiplication as it is easier to work with
+
+    n = len(dependent)
+    g = len(unique_groups)
+
+    # construct Design Matrix via General Linear Model (GLM) approach
+    # drop teh first dummy variables for the categorical independent factor groups
+    dummy_cols = [(independent == grp).astype(float) for grp in unique_groups[1:]]
+    D = np.column_stack(dummy_cols) if dummy_cols else np.empty((n, 0))
+
+    # assemble full design matrix: [Intercept (B_0) | Group Dummies (T_i) | Covariates (C)]
+    intercept = np.ones((n, 1))
+    C = np.column_stack(covariates) if covariates else np.empty((n, 0))
+    # now combine column, group dummies, and continuous covariates
+    X_full = np.hstack([intercept, D, C])
+    
+    # fit full model via Ordinary Least Squares (OLS)
+    # solves min ||X_full * beta - dependent||^2 to find Residual Sum of Squares (RSS_full)
+    beta_full, rss_full, _, _ = np.linalg.lstsq(X_full, dependent, rcond=None)
+    # normalize rss_full format across different NumPy versions (scalar vs 1D array)
+    if rss_full.ndim > 0 and len(rss_full) > 0:
+        rss_full = rss_full[0]
+    elif rss_full.ndim == 0:
+        pass # rss_full is already a scalar!
+    else:
+        rss_full = np.sum((dependent - (X_full @ beta_full)) ** 2)
+
+    # compute degrees of freedom error
+    df_error = n - X_full.shape[1]
+    if df_error <= 0:
+        raise ValueError("Degrees of freedom for error must be greater than 0. Too many parameters for sample size.")
+    # now compute mean squared error
+    ms_error = rss_full / df_error
+
+    # now compute sum of squares
+    # sstotal = np.sum((dependent - np.mean(dependent)) ** 2)
+    # df_total = n - 1
+
+    # F-Test for Independent Factor (Group Effect)
+    # reduced model drops only the group dummy columns: [Intercept, Covariates]
+    X_red_factor = np.hstack([intercept, C])
+    _, rss_red_factor, _, _ = np.linalg.lstsq(X_red_factor, dependent, rcond=None)
+    if rss_red_factor.ndim > 0 and len(rss_red_factor) > 0:
+        rss_red_factor = rss_red_factor[0]
+
+    # Sum of Squares for the Factor is the increase in RSS when groups are removed
+    ss_factor = max(0.0, rss_red_factor - rss_full)
+    df_factor = g - 1
+    ms_factor = ss_factor / df_factor if df_factor > 0 else 0.0
+    # now we can compute the actual F-statistic for the factor and p-value
+    # just use the same formula as always
+    f_factor = ms_factor / ms_error if ms_error > 0 else 0.0
+    p_factor = f.sf(f_factor, df_factor, df_error)
+
+    # now let's compute the F-statistic and p-value for each covariate
+    covariate_stats = np.zeros(len(covariates)) # to be filled
+    covariate_pvals = np.zeros(len(covariates)) # to be filled
+    for i in range(len(covariates)):
+        # isolate and drop the j-th covariate column from the full design matrix
+        col_idx = 1 + D.shape[1] + i
+        X_red_cov = np.delete(X_full, col_idx, axis=1)
+
+        # fit reduced model without ith covariate
+        _, rss_red_cov, _, _ = np.linalg.lstsq(X_red_cov, dependent, rcond=None)
+        if rss_red_cov.ndim > 0 and len(rss_red_cov) > 0:
+            rss_red_cov = rss_red_cov[0]
+
+        # covariate Sum of Squares is the increase in RSS resulting from dropping ith covariate
+        ss_cov = max(0.0, rss_red_cov - rss_full)
+        df_cov = 1
+        ms_cov = ss_cov / df_cov
+        f_cov = ms_cov / ms_error if ms_error > 0 else 0.0
+        p_cov = f.sf(f_cov, df_cov, df_error)
+
+        covariate_stats[i] = f_cov
+        covariate_pvals[i] = p_cov
+
+    return F_ancovaResult(
+        statistic=f_factor,
+        pvalue=p_factor,
+        df_factor=df_factor,
+        df_error=df_error,
+        covariate_stats=covariate_stats,
+        covariate_pvalues=covariate_pvals
+    )

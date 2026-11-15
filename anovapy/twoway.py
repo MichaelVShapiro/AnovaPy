@@ -1233,7 +1233,7 @@ def art(
 
     It is also very important to note how this function implements strictly the **Type III Sum of Squares** method for calculating the F-statistics and p-values for each factor and interaction. This makes it so the function can even handle unbalanced designs (i.e., unequal sample sizes across groups).
 
-    This function *does not* perform any post-hoc tests, it only computes the statistics and p-values. Typically, to perform a post-hoc test after ART ANOVA (assuming your results are significant of course), you would use the ART-C Framework.
+    This function *does not* perform any post-hoc tests, it only computes the statistics and p-values. Typically, to perform a post-hoc test after ART ANOVA (assuming your results are significant of course), you would use the ART-C Framework (see `anovapy.twoway.artc`).
 
     **Extremely important note:** AnovaPy implements the Aligned Rank Transform using native NumPy `np.float64` precision. In rare edge cases involving extreme floating-point boundaries (for instance near the 15th decimal place), tie-breaking behavior may differ slightly from R's ARTool due to R's internal formatting/rounding differences. This results in higher mathematical precision in AnovaPy.
 
@@ -1721,6 +1721,14 @@ def transform_dependent(
     -------
     np.ndarray
         Transformed dependent variable.
+    
+    Notes
+    -----
+    Usually the dependent variable is transformed when normality assumptions are not met.
+
+    Depending on the data's skewness, different types of transformations may be applied.
+
+    After transforming the dependent variable, you should **always** re-check assumptions before running a Two Way ANOVA again.
 
     References
     ----------
@@ -1730,6 +1738,10 @@ def transform_dependent(
     """
     dep = np.asarray(dependent, dtype=float)
 
+    # validate
+    if nan_policy not in {'propagate', 'omit', 'raise'}:
+        raise ValueError("nan_policy must be one of {'propagate', 'omit', 'raise'}.")
+
     # Handle NaN Policy
     has_nan = np.isnan(dep).any()
     if has_nan:
@@ -1737,6 +1749,8 @@ def transform_dependent(
             raise ValueError("Input array contains NaN values.")
         elif nan_policy == "omit":
             dep = dep[~np.isnan(dep)]
+
+    # depending on the transformation, we can propagate as we transform
 
     # Apply Transformations
     if method == "log":

@@ -8,6 +8,7 @@ import numpy as np
 from scipy.spatial.distance import pdist, squareform
 from scipy.special import gamma, hyp1f1
 from scipy.stats import chi2, kurtosis, lognorm, norm, shapiro, skew
+import warnings
 
 __all__ = ["doornik", "energy", "henze", "mardia", "royston", "shapiro_francia"]
 
@@ -149,6 +150,9 @@ def shapiro_francia(
     Z = (np.log(1 - W_prime) - uu) / sigma
     # derive p-value from normal distribution
     p_value = norm.sf(Z)
+
+    if n > 5000:
+        warnings.warn(f"anovapy.normal.shapiro_francia: For N > 5000, computed p-value may not be accurate. Current N is {n}.", stacklevel=2)
 
     return ShapiroFranciaResult(statistic=W_prime, pvalue=p_value)
 

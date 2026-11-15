@@ -6,6 +6,7 @@ There are a few ways to check normality with AnovaPy, and this document covers a
 
 ## Table of Contents
 
+- [Understanding Multivariate Data Format](#understanding-multivariate-data-format)
 - [Using Shapiro-Wilk Test](#using-shapiro-wilk-test)
 - [Using Shapiro-Francia Test](#using-shapiro-francia-test)
 - [Mardia's Test](#mardias-test)
@@ -13,6 +14,43 @@ There are a few ways to check normality with AnovaPy, and this document covers a
 - [Henze-Zirkler Test](#henze-zirkler-test)
 - [Doornik-Hansen Test](#doornik-hansen-test)
 - [Energy Test (E-Statistic)](#energy-test-e-statistic)
+
+## Understanding Multivariate Data Format
+
+To use AnovaPy's multivariate normality tests and MANOVA functions, it helps to understand how multivariate data is structured in NumPy.
+
+All multivariate data in `AnovaPy` is represented as a 2D numeric array with the shape: `(n_observations, n_variables)`.
+
+* **Rows (`n_observations`):** Individual subjects, samples, or experimental units.
+* **Columns (`n_variables`):** The dependent response variables being tested.
+
+If your data lives in a CSV file or a Pandas `DataFrame`, converting it for AnovaPy is straightforward using `.to_numpy()`:
+
+```python
+import pandas as pd
+import numpy as np
+
+df = pd.DataFrame({
+    'obs1': np.array([1, 4, 2, 1, 4, 1]),
+    'obs2': np.array([5, 1, 3, 4, 2, 0]),
+    'obs3': np.array([1, 4, 4, 2, 3, 1])
+})
+
+# this DataFrame has 6 rows and 3 columns.
+# convert the DataFrame into a standard 2D NumPy array:
+multivariate_data = df.to_numpy() # that's it!! You can run multivariate normality tests or MANOVA on `multivariate_data`
+print(multivariate_data.shape) # Outputs: (6, 3)
+print(multivariate_data)
+# prints: array([[1, 5, 1],
+#       [4, 1, 4],
+#       [2, 3, 4],
+#       [1, 4, 2],
+#       [4, 2, 3],
+#       [1, 0, 1]])
+
+# or take specific columns
+multivariate_data_specific = df[['obs1', 'obs2']].to_numpy()
+```
 
 ## Using Shapiro-Wilk Test
 
@@ -43,7 +81,7 @@ from anovapy.normal import mardia
 import numpy as np
 
 # note that since we are working with multivariate data, a 2D array must be passed in
-samples = np.random.normal(loc=0.0, scale=1.0, size=(60, 80))
+samples = np.random.normal(loc=0.0, scale=1.0, size=(60, 2)) # so 2 dependent variables
 
 mardia_test = mardia(samples)
 
@@ -59,7 +97,7 @@ Note that AnovaPy was designed to have functions whose signatures are similar to
 from anovapy.normal import mardia
 import numpy as np
 
-samples = np.random.normal(loc=0.0, scale=1.0, size=(60, 80))
+samples = np.random.normal(loc=0.0, scale=1.0, size=(60, 4)) # 4 dependent variables
 
 samples[0, 1] = np.nan  # just to keep it simple
 
@@ -89,7 +127,7 @@ Another popular way to check normality in multivariate data before running MANOV
 from anovapy.normal import royston
 import numpy as np
 
-samples = np.random.normal(loc=0.0, scale=1.0, size=(60, 80))
+samples = np.random.normal(loc=0.0, scale=1.0, size=(60, 2))
 
 statistic, p_value = royston(samples)
 
