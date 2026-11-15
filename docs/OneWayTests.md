@@ -125,7 +125,7 @@ AnovaPy also let's you run a One Way Analysis of Covariance (ANCOVA) via the `f_
 from anovapy.oneway import f_ancova
 
 # let's generate some fresh data
-labels = np.repeat(['A', 'B', 'C'], 10)
+labels = np.repeat(["A", "B", "C"], 10)
 dependent = np.random.normal(size=30)
 covariate = np.random.normal(size=30)
 
@@ -134,19 +134,27 @@ res = f_ancova(labels, dependent, covariate)
 print(f"F-Statistic: {res.statistic}, p-value: {res.pvalue}")
 
 for i in range(len(res.covariate_stats)):
-    print(f"Covariate F-Statistic: {res.covariate_stats[i]}, p-value: {res.covariate_pvalues[i]}")
+    print(
+        f"Covariate F-Statistic: {res.covariate_stats[i]}, p-value: {res.covariate_pvalues[i]}"
+    )
 
 # or pass in more covariates
 
 covariate2 = np.random.normal(size=30)
 covariate3 = np.random.normal(size=30)
 
-res_more_covariate_example = f_ancova(labels, dependent, covariate, covariate2, covariate3)
+res_more_covariate_example = f_ancova(
+    labels, dependent, covariate, covariate2, covariate3
+)
 
-print(f"F-Statistic: {res_more_covariate_example.statistic}, p-value: {res_more_covariate_example.pvalue}")
+print(
+    f"F-Statistic: {res_more_covariate_example.statistic}, p-value: {res_more_covariate_example.pvalue}"
+)
 
 for i in range(len(res_more_covariate_example.covariate_stats)):
-    print(f"Covariate F-Statistic: {res_more_covariate_example.covariate_stats[i]}, p-value: {res_more_covariate_example.covariate_pvalues[i]}")
+    print(
+        f"Covariate F-Statistic: {res_more_covariate_example.covariate_stats[i]}, p-value: {res_more_covariate_example.covariate_pvalues[i]}"
+    )
 ```
 
 Note that in `covariate_stats` and the associated `covariate_pvalues`, each item's index there is proportional to how the covariate was passed in. For example, in `res_more_covariate_example.covariate_stats`, F-statistic at index 0 refers to the F-statistic (and the accompanying p-value) for `covariate`, the F-statistic at index 1 refers to the F-statistic for `covariate2` and so on.

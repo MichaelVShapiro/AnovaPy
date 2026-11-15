@@ -1721,7 +1721,7 @@ def transform_dependent(
     -------
     np.ndarray
         Transformed dependent variable.
-    
+
     Notes
     -----
     Usually the dependent variable is transformed when normality assumptions are not met.
@@ -1739,7 +1739,7 @@ def transform_dependent(
     dep = np.asarray(dependent, dtype=float)
 
     # validate
-    if nan_policy not in {'propagate', 'omit', 'raise'}:
+    if nan_policy not in {"propagate", "omit", "raise"}:
         raise ValueError("nan_policy must be one of {'propagate', 'omit', 'raise'}.")
 
     # Handle NaN Policy

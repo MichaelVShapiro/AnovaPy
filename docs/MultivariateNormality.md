@@ -30,16 +30,18 @@ If your data lives in a CSV file or a Pandas `DataFrame`, converting it for Anov
 import pandas as pd
 import numpy as np
 
-df = pd.DataFrame({
-    'obs1': np.array([1, 4, 2, 1, 4, 1]),
-    'obs2': np.array([5, 1, 3, 4, 2, 0]),
-    'obs3': np.array([1, 4, 4, 2, 3, 1])
-})
+df = pd.DataFrame(
+    {
+        "obs1": np.array([1, 4, 2, 1, 4, 1]),
+        "obs2": np.array([5, 1, 3, 4, 2, 0]),
+        "obs3": np.array([1, 4, 4, 2, 3, 1]),
+    }
+)
 
 # this DataFrame has 6 rows and 3 columns.
 # convert the DataFrame into a standard 2D NumPy array:
-multivariate_data = df.to_numpy() # that's it!! You can run multivariate normality tests or MANOVA on `multivariate_data`
-print(multivariate_data.shape) # Outputs: (6, 3)
+multivariate_data = df.to_numpy()  # that's it!! You can run multivariate normality tests or MANOVA on `multivariate_data`
+print(multivariate_data.shape)  # Outputs: (6, 3)
 print(multivariate_data)
 # prints: array([[1, 5, 1],
 #       [4, 1, 4],
@@ -49,7 +51,7 @@ print(multivariate_data)
 #       [1, 0, 1]])
 
 # or take specific columns
-multivariate_data_specific = df[['obs1', 'obs2']].to_numpy()
+multivariate_data_specific = df[["obs1", "obs2"]].to_numpy()
 ```
 
 ## Using Shapiro-Wilk Test
@@ -81,7 +83,7 @@ from anovapy.normal import mardia
 import numpy as np
 
 # note that since we are working with multivariate data, a 2D array must be passed in
-samples = np.random.normal(loc=0.0, scale=1.0, size=(60, 2)) # so 2 dependent variables
+samples = np.random.normal(loc=0.0, scale=1.0, size=(60, 2))  # so 2 dependent variables
 
 mardia_test = mardia(samples)
 
@@ -97,7 +99,7 @@ Note that AnovaPy was designed to have functions whose signatures are similar to
 from anovapy.normal import mardia
 import numpy as np
 
-samples = np.random.normal(loc=0.0, scale=1.0, size=(60, 4)) # 4 dependent variables
+samples = np.random.normal(loc=0.0, scale=1.0, size=(60, 4))  # 4 dependent variables
 
 samples[0, 1] = np.nan  # just to keep it simple
 

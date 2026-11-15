@@ -12,12 +12,13 @@ import numpy as np
 from scipy.linalg import helmert
 from scipy.stats import f, norm, rankdata, ttest_rel
 
-__all__ = ["brown", "dunns", "f_repeated", "pairwise_ttest", "f_ancova"]
+__all__ = ["brown", "dunns", "f_ancova", "f_repeated", "pairwise_ttest"]
 
 BrownResult = namedtuple("BrownResult", ["statistic", "pvalue"])
 RepeatedMeasuresAnovaResult = namedtuple(
     "RepeatedMeasuresAnovaResult", ["statistic", "pvalue"]
 )
+
 
 @dataclass
 class F_ancovaResult:
@@ -39,12 +40,14 @@ class F_ancovaResult:
     covariate_pvalues : np.ndarray
         1D array of p-values for each covariate passed in
     """
+
     statistic: float
     pvalue: float
     df_factor: int
     df_error: int
     covariate_stats: np.ndarray
     covariate_pvalues: np.ndarray
+
 
 @dataclass
 class DunnsResult:
@@ -574,11 +577,12 @@ def pairwise_ttest(
 
     return AdjustedTTestResult(statistic=np.array(stats), pvalue=np.array(adjusted))
 
+
 def f_ancova(
     independent: np.typing.ArrayLike,
     dependent: np.typing.ArrayLike,
     *covariates: np.typing.ArrayLike,
-    nan_policy: Literal['propagate', 'omit', 'raise'] = 'propagate'
+    nan_policy: Literal["propagate", "omit", "raise"] = "propagate",
 ) -> F_ancovaResult:
     """
     Performs a One Way Analysis of Covariance (ANCOVA).
@@ -593,12 +597,12 @@ def f_ancova(
         At least one covariate. Each must be a 1D array
     nan_policy : {'propagate', 'omit', 'raise'}
         Defines how to handle input NaNs.
-    
+
     Returns
     -------
     F_ancovaResult
         A dataclass containing the F-statistic and p-value for the independent factor, along with degrees of freedom and computed F-statistic and p-value for each covariate passed in.
-    
+
     Notes
     -----
     The general formula here is:
@@ -629,25 +633,26 @@ def f_ancova(
     covariates = [np.asarray(c, dtype=float) for c in covariates]
 
     # validate
-    if nan_policy not in {'propagate', 'omit', 'raise'}:
+    if nan_policy not in {"propagate", "omit", "raise"}:
         raise ValueError("nan_policy must be one of {'propagate', 'omit', 'raise'}.")
 
     # handle nan
-    has_nan = np.isnan(dependent).any() or any([np.isnan(i).any() for i in covariates])
+    # TODO: CHECK NAN IN COVARIATES AND OMIT RESULTS
+    has_nan = np.isnan(dependent).any()
     if has_nan:
-        if nan_policy == 'propagate':
+        if nan_policy == "propagate":
             return F_ancovaResult(
                 statistic=np.nan,
                 pvalue=np.nan,
                 df_factor=np.nan,
                 df_error=np.nan,
                 covariate_stats=np.array(np.nan),
-                covariate_pvalues=np.array(np.nan)
+                covariate_pvalues=np.array(np.nan),
             )
-        elif nan_policy == 'raise':
+        elif nan_policy == "raise":
             raise ValueError("Input contains NaN values.")
         # omit
-    
+
     # validate that independent variable has at least two levels
     unique_groups = np.unique(independent)
 
@@ -669,7 +674,7 @@ def f_ancova(
     C = np.column_stack(covariates) if covariates else np.empty((n, 0))
     # now combine column, group dummies, and continuous covariates
     X_full = np.hstack([intercept, D, C])
-    
+
     # fit full model via Ordinary Least Squares (OLS)
     # solves min ||X_full * beta - dependent||^2 to find Residual Sum of Squares (RSS_full)
     beta_full, rss_full, _, _ = np.linalg.lstsq(X_full, dependent, rcond=None)
@@ -677,14 +682,16 @@ def f_ancova(
     if rss_full.ndim > 0 and len(rss_full) > 0:
         rss_full = rss_full[0]
     elif rss_full.ndim == 0:
-        pass # rss_full is already a scalar!
+        pass  # rss_full is already a scalar!
     else:
         rss_full = np.sum((dependent - (X_full @ beta_full)) ** 2)
 
     # compute degrees of freedom error
     df_error = n - X_full.shape[1]
     if df_error <= 0:
-        raise ValueError("Degrees of freedom for error must be greater than 0. Too many parameters for sample size.")
+        raise ValueError(
+            "Degrees of freedom for error must be greater than 0. Too many parameters for sample size."
+        )
     # now compute mean squared error
     ms_error = rss_full / df_error
 
@@ -709,8 +716,8 @@ def f_ancova(
     p_factor = f.sf(f_factor, df_factor, df_error)
 
     # now let's compute the F-statistic and p-value for each covariate
-    covariate_stats = np.zeros(len(covariates)) # to be filled
-    covariate_pvals = np.zeros(len(covariates)) # to be filled
+    covariate_stats = np.zeros(len(covariates))  # to be filled
+    covariate_pvals = np.zeros(len(covariates))  # to be filled
     for i in range(len(covariates)):
         # isolate and drop the j-th covariate column from the full design matrix
         col_idx = 1 + D.shape[1] + i
@@ -737,5 +744,5 @@ def f_ancova(
         df_factor=df_factor,
         df_error=df_error,
         covariate_stats=covariate_stats,
-        covariate_pvalues=covariate_pvals
+        covariate_pvalues=covariate_pvals,
     )
