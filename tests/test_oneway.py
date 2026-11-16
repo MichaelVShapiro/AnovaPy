@@ -12,9 +12,9 @@ from anovapy.oneway import (
     brown,
     dunns,
     f_ancova,
+    f_permutation,
     f_repeated,
     pairwise_ttest,
-    f_permutation
 )
 
 # this one is taken from: https://www.statology.org/repeated-measures-anova-by-hand/
@@ -217,12 +217,15 @@ def test_against_statsmodels():
             res_anovapy.covariate_pvalues, covar_pvals, rtol=1e-2
         )
 
+
 def test_permutation_anova():
     # test cases were done against R's wPerm package
     # little note though: NumPy and R use different random number generator algorithms so the p-values are expected to look slightly different (see doc string)
     # we are though testing statistical stability and convergence, not identical pseudo-random streams
     # let's make it easy -- just reuse the tutorial samples data
-    res = f_permutation(*tutorial_samples, random_state=42) # make sure all results are reproducible
+    res = f_permutation(
+        *tutorial_samples, random_state=42
+    )  # make sure all results are reproducible
 
     np.testing.assert_allclose(res.statistic, 4.041667, rtol=1e-2)
     np.testing.assert_allclose(res.pvalue, 0.376, atol=1)

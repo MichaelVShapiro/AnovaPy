@@ -10,15 +10,22 @@ from typing import Literal
 
 import numpy as np
 from scipy.linalg import helmert
-from scipy.stats import f, norm, rankdata, ttest_rel, f_oneway
+from scipy.stats import f, f_oneway, norm, rankdata, ttest_rel
 
-__all__ = ["brown", "dunns", "f_ancova", "f_repeated", "pairwise_ttest", "f_permutation"]
+__all__ = [
+    "brown",
+    "dunns",
+    "f_ancova",
+    "f_permutation",
+    "f_repeated",
+    "pairwise_ttest",
+]
 
 BrownResult = namedtuple("BrownResult", ["statistic", "pvalue"])
 RepeatedMeasuresAnovaResult = namedtuple(
     "RepeatedMeasuresAnovaResult", ["statistic", "pvalue"]
 )
-F_permutationResult = namedtuple('F_permutationResult', ['statistic', 'pvalue'])
+F_permutationResult = namedtuple("F_permutationResult", ["statistic", "pvalue"])
 
 
 @dataclass
@@ -748,11 +755,12 @@ def f_ancova(
         covariate_pvalues=covariate_pvals,
     )
 
+
 def f_permutation(
     *samples: np.typing.ArrayLike,
     permutations: int = 999,
     random_state: int | np.random.Generator | None = None,
-    nan_policy: Literal['propagate', 'omit', 'raise'] = 'propagate'
+    nan_policy: Literal["propagate", "omit", "raise"] = "propagate",
 ) -> F_permutationResult:
     """
     Runs a One Way Permutation ANOVA.
@@ -769,21 +777,21 @@ def f_permutation(
         A seed to state for reproducible results
     nan_policy : {'propagate', 'omit', 'raise'}
         Defines how to handle input NaNs.
-    
+
     Returns
     -------
     statistic : float
         Computed F-statistic
     pvalue : float
         Computed p-value
-    
+
     Notes
     -----
     A note on comparing this function to an R library like `wPerm`. AnovaPy uses NumPy to shuffle and generate random data. NumPy uses a different algorithm compared to R when generating random data, and hence, when comparing this function to R, p-values may look slightly different. Hence, do not expect p-values to match R's wPerm package seed-for-seed.
     During testing of this function, statistical stability and convergence were tested, not identical pseudo-random streams.
 
     The `permutations` parameter controls the number of random label shuffles used to build the null distribution of the F-statistic. Leaving it at its default, `999`, is recommended as it balances runtime speed with enough resolution to clear standard significance thresholds.
-    
+
     References
     ----------
     .. [1] Anderson, Marti J. "Permutation Tests for Univariate or Multivariate Analysis of Variance and Regression." Canadian Journal of Fisheries and Aquatic Sciences, vol. 58, no. 3, Mar. 2001, pp. 626-39, https://doi.org/10.1139/f01-004.
@@ -791,17 +799,17 @@ def f_permutation(
     samples = [np.asarray(i) for i in samples]
 
     # validate
-    if nan_policy not in {'propagate', 'omit', 'raise'}:
+    if nan_policy not in {"propagate", "omit", "raise"}:
         raise ValueError("nan_policy not in {'propagate', 'omit', 'raise'}.")
 
     # handle nan
-    #TODO: MAYBE IMPROVE THIS SOMEHOW?
+    # TODO: MAYBE IMPROVE THIS SOMEHOW?
     for i in range(len(samples)):
         has_nan = np.isnan(samples[i]).any()
         if has_nan:
-            if nan_policy == 'propagate':
+            if nan_policy == "propagate":
                 return F_permutationResult(statistic=np.nan, pvalue=np.nan)
-            elif nan_policy == 'raise':
+            elif nan_policy == "raise":
                 raise ValueError("Input contains NaN values.")
             samples[i] = samples[i][~np.isnan(samples[i])]
 
@@ -823,7 +831,7 @@ def f_permutation(
         groups = []
         start = 0
         for n in sizes:
-            groups.append(shuffled[start:start + n])
+            groups.append(shuffled[start : start + n])
             start += n
         # compute f-stat on that
         F_p, _ = f_oneway(*groups)
