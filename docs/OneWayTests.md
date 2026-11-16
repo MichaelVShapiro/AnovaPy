@@ -117,6 +117,37 @@ print(f"p-values: {res.pvalue}")
 
 Note that `statistic` and `pvalue` in this case is a list of values, where each index represents a comparison. For example, `res.statistic[0]` represents the comparison of `sample1` and `sample2`, `res.statistic[1]` represents the comparison of `sample1` and `sample3` and so on.
 
+## Permutation One Way ANOVA
+
+Another common test run when assumptions of One Way ANOVA are not met is the Permutation One Way ANOVA, which you can run with:
+
+```python
+from anovapy.oneway import f_permutation
+
+# let's reuse sample1, sample2, and sample3 from earlier
+
+res = f_permutation(sample1, sample2, sample3)
+
+print(f"F-Statistic: {res.statistic}, p-value: {res.pvalue}")
+```
+
+The `f_permutation` function also has some parameters you can mess around with, more specifically the `permutations` parameter which lets you set the number of permutations to run and the `random_state` parameter so you can set a custom seed for reproducible results.
+
+A word on the `permutations` parameter. This controls the number of random label shuffles used to build the null distribution of the F-statistic. The smallest p-value that can be reported is `1 / (permutations + 1)`, so choose a value whose floor is well below your significance threshold (this is what is recommended by the way when setting the number of permutations):
+
+- **999** (default) -- minimum $p = 0.001$, sufficient for testing at $\alpha = 0.05$.
+- **4999** -- minimum $p \approx 0.0002$, sufficient for testing at $\alpha = 0.01$.
+
+Increasing the number of permutations beyond these values improves the precision of the p-value (especially the third decimal place) but has diminishing returns. If the number of permutations exceeds the total number of unique label arrangements for your data, the test becomes exact.
+
+The examples below demonstrate their usage accordingly:
+
+```python
+res2 = f_permutation(sample1, sample2, sample3, permutations=4999)
+
+res3 = f_permutation(sample1, sample2, sample3, permutations=99, random_state=42)
+```
+
 ## One Way ANCOVA
 
 AnovaPy also let's you run a One Way Analysis of Covariance (ANCOVA) via the `f_ancova` function. You can pass in one or more covariates very easily:
