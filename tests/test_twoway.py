@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from anovapy.twoway import art, artc, f_twoway, scheirer, tukey_hsd
+from anovapy.twoway import art, artc, f_twoway, scheirer, tukey_hsd, f_permutation
 
 # note that expected values were run with R
 # various R packages were used for making test cases such as ARTool and rcompanion
@@ -320,6 +320,72 @@ def test_artc_interaction():
 
     np.testing.assert_allclose(res[2].statistic, 0.9, rtol=1e-2)
     np.testing.assert_allclose(res[2].p_value_adjusted, 0.4345, rtol=1e-2)
+
+def test_permutation():
+    # note that tests were done against the R permuco package
+    factor_a = np.array(
+        ["F1", "F1", "F1", "F1", "F2", "F2", "F2", "F2", "F3", "F3", "F3", "F3"]
+    )
+    factor_b = np.array(
+        [
+            "Wheat",
+            "Rice",
+            "Wheat",
+            "Rice",
+            "Wheat",
+            "Rice",
+            "Wheat",
+            "Rice",
+            "Wheat",
+            "Rice",
+            "Wheat",
+            "Rice",
+        ]
+    )
+    dependent = np.array(
+        [12.3, 14.5, 11.8, 16.1, 15.2, 17.0, 10.1, 11.2, 9.8, 10.2, 8.8, 7.8]
+    )
+    res = f_permutation(factor_a=factor_a, factor_b=factor_b, dependent=dependent, random_state=42)
+
+    res_stat_given = np.array([res.statistic_a, res.statistic_b, res.statistic_interaction])
+    res_pval_given = np.array([res.pvalue_a, res.pvalue_b, res.pvalue_interaction])
+
+    # once again, as stated in some other test cases, NumPy and R use different algorithms for generating random data
+    # so seed for seed p-values are expected to not be 100% the same
+    # we are mainly testing for statistical stability and convergence
+
+    res_stat_expected = np.array([4.4399, 1.1188, 0.5462])
+    res_pval_expected = np.array([0.06607, 0.31932, 0.57958])
+
+    np.testing.assert_allclose(res_stat_given, res_stat_expected, rtol=1e-2)
+    np.testing.assert_allclose(res_pval_given, res_pval_expected, rtol=1)
+
+    # note: permuco uses Type III Sum of Squares under the hood
+    # AnovaPy, at least as of v0.2, uses Type I Sum of Squares in its f_twoway function
+    # hence, we cannot compare the ter Braak method directly as p-values are slightly different
+    # the algorithm in AnovaPy is correct, it just implements a different Type Sum of Squares
+    # the below just shows expected values
+    # res2 = f_permutation(factor_a=factor_a, factor_b=factor_b, dependent=dependent, method='braak', random_state=42)
+
+    # res_stat_given = np.array([res2.statistic_a, res2.statistic_b, res2.statistic_interaction])
+    # res_pval_given = np.array([res2.pvalue_a, res2.pvalue_b, res2.pvalue_interaction])
+
+    # res_pval_expected = np.array([0.07407, 0.32733, 0.57357])
+
+    # np.testing.assert_allclose(res_stat_given, res_stat_expected, rtol=1e-2)
+    # np.testing.assert_allclose(res_pval_given, res_pval_expected, rtol=1e-2)
+
+    # note that the R package permuco does not support the Edgington method
+    # so for this particular test case the R package PermutationR which implements the logic
+    res3 = f_permutation(factor_a=factor_a, factor_b=factor_b, dependent=dependent, method='edgington', random_state=42)
+
+    res_stat_given = np.array([res3.statistic_a, res3.statistic_b, res3.statistic_interaction])
+    res_pval_given = np.array([res3.pvalue_a, res3.pvalue_b, res3.pvalue_interaction])
+
+    res_pval_expected = np.array([0.05105105, 0.26926927, 0.59859860])
+
+    np.testing.assert_allclose(res_stat_given, res_stat_expected, rtol=1e-2)
+    np.testing.assert_allclose(res_pval_given, res_pval_expected, rtol=1)
 
 
 class TestTwoWayAnova:

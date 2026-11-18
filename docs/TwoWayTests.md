@@ -8,6 +8,7 @@ AnovaPy implements the Two Way ANOVA test and a variety of other "alternative" t
 - [Scheirer-Ray-Hare Test](#scheirer-ray-hare-test)
 - [ART ANOVA](#art-anova)
 - [Transforming Dependent Variable](#transforming-dependent-variable)
+- [Permutation Two Way ANOVA](#permutation-two-way-anova)
 
 ## Two Way ANOVA
 
@@ -218,3 +219,41 @@ Note that when `method` is left out, it will default to `log`.
 A word on `transform_and_run_twoway` and `transform_dependent`. Typically, after transforming the dependent variable, you would run a standard Two Way ANOVA test. You will notice in the code above how after calling `transform_dependent` we ran `f_twoway` automatically. `transform_and_run_twoway`, therefore, is literally just calling `transform_dependent` and then `f_twoway` right away.
 
 Besides that, after transforming your dependent variable you should **always** recheck your assumptions again before running a Two Way ANOVA!
+
+## Permutation Two Way ANOVA
+
+Another common method used when assumptions for Two Way ANOVA are not met is the Permutation Two Way ANOVA. This can be executed with the `f_permutation` function in AnovaPy:
+
+```python
+from anovapy.twoway import f_permutation
+
+res = f_permutation(factor_a, factor_b, dependent)
+```
+
+Just like the `anovapy.oneway.f_permutation` function, you can also mess around with the `permutations` and `random_state` parameter to control number of permutations to run to compute the p-value and set a seed for reproducability respectively:
+
+```python
+res_perm = f_permutation(factor_a, factor_b, dependent, permutations=99)
+
+res_seed_and_perm = f_permutation(factor_a, factor_b, dependent, permutations=999, random_state=42)
+```
+
+Note that unlike a Permutation One Way ANOVA and PERMANOVA, a Two Way ANOVA has different permutation methods one can work with. Each shuffles data in a certain way which affects the outcome of the resulting p-value. Currently, AnovaPy supports the following methods:
+
+- Manly
+- Edgington
+- ter Braak
+
+You can set what method to use via the `method` parameter as shown below:
+
+```python
+res_manly = f_permutation(factor_a, factor_b, dependent, method='manly')
+
+res_edgington = f_permutation(factor_a, factor_b, dependent, method='edgington')
+
+res_ter_braak = f_permutation(factor_a, factor_b, dependent, method='braak')
+```
+
+Note that if not set, `method` will default to `manly`.
+
+For a complete break down of when to use which method and differences between them, see the doc string which has an excellent explanation.

@@ -19,6 +19,7 @@ __all__ = [
     "transform_and_run_twoway",
     "transform_dependent",
     "tukey_hsd",
+    "f_permutation"
 ]
 
 
@@ -202,6 +203,63 @@ class TwoWayAnovaResult:
     def __repr__(self):
         return (
             f"TwoWayAnovaResult("
+            f"  statistic_a={self.statistic_a}, "
+            f"  pvalue_a={self.pvalue_a}, "
+            f"  df_a={self.df_a}, "
+            f"  statistic_b={self.statistic_b}, "
+            f"  pvalue_b={self.pvalue_b}, "
+            f"  df_b={self.df_b}, "
+            f"  statistic_interaction={self.statistic_interaction}, "
+            f"  pvalue_interaction={self.pvalue_interaction}, "
+            f"  df_interaction={self.df_interaction}"
+            f")"
+        )
+
+@dataclass
+class PermutationAnovaResult:
+    """
+    Result of `anovapy.twoway.f_permutation`.
+
+    Attributes
+    ----------
+    statistic_a : float
+        The F-statistic for Factor A
+    pvalue_a : float
+        Computed p-value of Factor A
+    df_a : int
+        Degrees of Freedom for Factor A
+    statistic_b : float
+        The F-Statistic for Factor B
+    pvalue_b : float
+        Computed p-value of Factor B
+    df_b : int
+        Degrees of Freedom for Factor B
+    statistic_interaction : float
+        The F-Statistic for the Interaction
+    pvalue_interaction : float
+        Computed p-value of Interaction
+    df_interaction : int
+        Degrees of Freedom for Interaction
+    """
+
+    # Factor A results
+    statistic_a: float # this is the observed statistic
+    pvalue_a: float
+    df_a: int
+
+    # Factor B results
+    statistic_b: float # this is the observed statistic
+    pvalue_b: float
+    df_b: int
+
+    # Interaction results
+    statistic_interaction: float # this is the observed statistic
+    pvalue_interaction: float
+    df_interaction: int
+
+    def __repr__(self):
+        return (
+            f"PermutationAnovaResult("
             f"  statistic_a={self.statistic_a}, "
             f"  pvalue_a={self.pvalue_a}, "
             f"  df_a={self.df_a}, "
@@ -1837,3 +1895,245 @@ def transform_and_run_twoway(
 
     # Pass original categorical factors with the newly transformed dependent variable
     return f_twoway(factor_a, factor_b, transformed_dep, nan_policy=nan_policy)
+
+def f_permutation(
+    factor_a: np.typing.ArrayLike,
+    factor_b: np.typing.ArrayLike,
+    dependent: np.typing.ArrayLike,
+    *,
+    method: Literal['manly', 'edgington', 'braak'] = 'manly',
+    permutations: int = 999,
+    random_state: int | np.random.Generator | None = None,
+    nan_policy: Literal['propagate', 'omit', 'raise'] = 'propagate'
+) -> PermutationAnovaResult:
+    """
+    Performs a Permutation Two Way ANOVA.
+
+    Parameters
+    ----------
+    factor_a : array_like
+        First categorical independent variable.
+    factor_b : array_like
+        Second categorical independent variable.
+    dependent : array_like
+        Continuous response/dependent variable.
+    method : {'manly', 'edgington', 'braak'}
+        The method used for shuffling the data.
+        - 'manly' : Use Manly's Approach (unrestricted permutation of raw observations).
+        - 'edgington' : Use Edgington's Approach (restricted permutations for main effects).
+        - 'braak' : Use ter Braak method (permuting residuals from the full model).
+    permutations : int
+        Number of permutations to run. Defaults to 999
+    random_state : int | np.random.Generator | None
+        A seed to set for reproducible results
+    nan_policy : {'propagate', 'omit', 'raise'}
+        Defines how to handle NaN inputs.
+    
+    Returns
+    -------
+    PermutationAnovaResult
+        A dataclass containing the computed statistics, p-values, and degrees of freedom
+    
+    Notes
+    -----
+    This is typically used when assumptions for Two Way ANOVA are not met.
+
+    Unlike a Permutation One Way ANOVA (see `anovapy.oneway.f_permutation`) or PERMANOVA (see `anovapy.manova.permanova`), Permutation Two Way ANOVA has a few different permutation methods that can be applied.
+    Taken from the literature [1], [2], and [3]:
+
+    - Manly (`method='manly'`): This works well for simple balanced designs, small samples, and when you want maximum power. It is not best for multi-factor designs and can be slightly liberal.
+    - Edgington (`method='edgington'`): This works well when you want an **exact** test for a main effect (controls for the other factor by construction) or for unbalanced designs where you want to condition on the other factor's structure. It has low power for main effects as number of possible restricted permutations can be very small (e.g., 2x2 with n=1 per cell -> only 2 permutations), which limits p-value resolution.
+    - ter Braak (`method='braak'`): This works well for complex designs (repeated measures, spatial autocorrelation), or when you want the most conservative/robust test. It is also the go to when you have covariates. The only trade off for this method is how it is the most conservative (low power). The identity-permutation statistic ≠ observed statistic, which can confuse people.
+
+    The practical rule of thumb is generally:
+
+    - When analyzing interaction, use the Manly method
+    - When analyzing main effects, if the design is balanced and simple, Manly is fine. If the design is unbalanced or you want to be more rigorous about conditioning on the other factor, use Edgington's restricted permutation. If you have a complex design (blocking, repeated measures, covariates), use ter Braak.
+
+    In practice, for a straightforward two-way design with independent observations, **Manly for all three effects** is the most common choice and is what most software defaults to. The restricted/residual approaches matter more when the design gets complicated or when you need exact Type I error control.
+
+    References
+    ----------
+    .. [1] Anderson, Marti J. "Permutation Tests for Univariate or Multivariate Analysis of Variance and Regression." Canadian Journal of Fisheries and Aquatic Sciences, vol. 58, no. 3, Mar. 2001, pp. 626-39, https://doi.org/10.1139/f01-004.
+    .. [2] Anderson, Marti, and Cajo Ter Braak. "Permutation Tests for Multi-Factorial Analysis of Variance." Journal of Statistical Computation and Simulation, vol. 73, no. 2, Jan. 2003, pp. 85-113, https://doi.org/10.1080/00949650215733.
+    .. [3] Edgington, Eugene S. Randomization Tests. 3rd ed., Marcel Dekker, 1995.
+    """
+    factor_a = np.asarray(factor_a)
+    factor_b = np.asarray(factor_b)
+    dependent = np.asarray(dependent, dtype=float)
+
+    # validate
+    if nan_policy not in {'propagate', 'omit', 'raise'}:
+        raise ValueError("nan_policy must be one of {'propagate', 'omit', 'raise'}.")
+    if method not in {'manly', 'edgington', 'braak'}:
+        raise ValueError("method must be one of {'manly', 'edgington', 'braak'}.")
+
+    # handle nan
+    has_nan = np.isnan(dependent).any()
+    if has_nan:
+        if nan_policy == 'propagate':
+            return PermutationAnovaResult(
+                statistic_a=np.nan,
+                pvalue_a=np.nan,
+                df_a=np.nan,
+                statistic_b=np.nan,
+                pvalue_b=np.nan,
+                df_b=np.nan,
+                statistic_interaction=np.nan,
+                pvalue_interaction=np.nan,
+                df_interaction=np.nan
+            )
+        elif nan_policy == 'raise':
+            raise ValueError("Input contains NaN values.")
+        # omit
+        mask = ~np.isnan(dependent)
+        dependent = dependent[mask]
+        factor_a = factor_a[mask]
+        factor_b = factor_b[mask]
+
+    # first compute observed statistic
+    F_obs = f_twoway(factor_a, factor_b, dependent)
+
+    # only compute unique values if we are working with anything but the manly method
+    # saves some computing power that's all
+    if method == 'edgington' or method == 'braak':
+        unique_a, a_inv = np.unique(factor_a, return_inverse=True)
+        unique_b, b_inv = np.unique(factor_b, return_inverse=True)
+
+    # now go through the given number of times
+    # shuffle data as according to the given method
+
+    num_greater_a = 0 # num permuted F-stats >= F_obs for Factor A
+    num_greater_b = 0 # for Factor B
+    num_greater_int = 0 # for interaction
+
+    # make a local copy of dependent just so the original isn't touched too much
+    y = dependent.copy()
+
+    # if the method is braak we need to compute the residuals ahead of time
+    if method == 'braak':
+        # ter Braak's permutation method relies on linear model projections
+        # we construct dummy-coded (treatment-coded) matrices for Factor A (Xa), Factor B (Xb), and the interaction (Xab), alongside an intercept
+        Xa = (a_inv[:, None] == np.arange(1, len(unique_a)))
+        Xb = (b_inv[:, None] == np.arange(1, len(unique_b)))
+        Xab = (Xa[:, :, None] * Xb[:, None, :]).reshape(len(y), -1)
+        intercept = np.ones((len(y), 1), dtype=float)
+
+        # this is just a helper function
+        # it literally just computes OLS fitted values (X * beta) via least-squares projection
+        def ols_fit(X_design: np.ndarray, target: np.ndarray) -> np.ndarray:
+            beta, _, _, _ = np.linalg.lstsq(X_design, target, rcond=None)
+            return X_design @ beta
+
+        # in the ter Braak method, we perform the permutation on the full model residuals
+        X_full = np.hstack([intercept, Xa, Xb, Xab])
+        residuals = y - ols_fit(X_full, y)
+
+        # kind of like Edgington, we test specific terms
+        # to do so, we need to construct data under the respective null hypothesis (H0) for that term
+        # this can be done by fitting the "reduced model" (omitting the term being tested) to retain its structural constraints
+        # note that as per how ter Braaks method works, we add back the residuals to the model (which we will permute) during the actual shuffling
+
+        # fit model without Factor A (intercept + B + interaction)
+        fit_no_a = ols_fit(np.hstack([intercept, Xb, Xab]), y)
+        # fit model without Factor B (intercept + A + interaction)
+        fit_no_b = ols_fit(np.hstack([intercept, Xa, Xab]), y)
+        # fit additive model without interaction (intercept + A + B)
+        fit_no_ab = ols_fit(np.hstack([intercept, Xa, Xb]), y)
+
+    gen = np.random.default_rng(random_state)
+    for _ in range(permutations):
+        # shuffle as according to a method
+        if method == 'manly':
+            # shuffle dependent
+            gen.shuffle(y)
+        elif method == 'edgington':
+            # let's shuffle only values in factor_a, factor_b, and together
+            # the idea here is that to test each statistic we only shuffle those labels that's all
+            # so shuffle Factor A
+            # to test Factor A: shuffle dependent within each level of Factor B
+            y_a = y.copy()
+            for b_level in range(len(unique_b)):
+                mask = (b_inv == b_level)
+                idx = np.where(mask)[0]
+                y_perm = y_a[idx].copy()
+                gen.shuffle(y_perm)
+                y_a[idx] = y_perm
+            temp_a = f_twoway(factor_a, factor_b, y_a)
+            if temp_a.statistic_a >= F_obs.statistic_a:
+                num_greater_a += 1
+
+            # now do the same thing for Factor B
+            y_b = y.copy()
+            for a_level in range(len(unique_a)):
+                mask = (a_inv == a_level)
+                idx = np.where(mask)[0]
+                y_perm = y_b[idx].copy()
+                gen.shuffle(y_perm)
+                y_b[idx] = y_perm
+            temp_b = f_twoway(factor_a, factor_b, y_b)
+            if temp_b.statistic_b >= F_obs.statistic_b:
+                num_greater_b += 1
+
+            # now do interaction
+            # we just shuffle it like normal
+            y_int = y.copy()
+            gen.shuffle(y_int)
+            temp_int = f_twoway(factor_a, factor_b, y_int)
+            if temp_int.statistic_interaction >= F_obs.statistic_interaction:
+                num_greater_int += 1
+
+            continue
+        else: # braak
+            # make a local copy to keep the original safe
+            permuted_res = residuals.copy()
+            gen.shuffle(permuted_res)
+
+            # test Factor A
+            # the dependent in this case is the reduced model made earlier and adding it with the shuffled data
+            # in short we are just simulating data where Factor A has no effect while preserving the effects of Factor B and the interaction
+            res_a = f_twoway(factor_a, factor_b, fit_no_a + permuted_res)
+            if res_a.statistic_a >= F_obs.statistic_a:
+                num_greater_a += 1
+
+            # test Factor B
+            # do same thing
+            res_b = f_twoway(factor_a, factor_b, fit_no_b + permuted_res)
+            if res_b.statistic_b >= F_obs.statistic_b:
+                num_greater_b += 1
+
+            # test interaction
+            # do same thing
+            res_int = f_twoway(factor_a, factor_b, fit_no_ab + permuted_res)
+            if res_int.statistic_interaction >= F_obs.statistic_interaction:
+                num_greater_int += 1
+
+            continue
+
+        # run two way on new data
+        res = f_twoway(factor_a, factor_b, y)
+
+        # now adjust
+        if res.statistic_a >= F_obs.statistic_a:
+            num_greater_a += 1
+        if res.statistic_b >= F_obs.statistic_b:
+            num_greater_b += 1
+        if res.statistic_interaction >= F_obs.statistic_interaction:
+            num_greater_int += 1
+
+    # now we can compute p-value
+    p_a = (num_greater_a + 1) / (permutations + 1)
+    p_b = (num_greater_b + 1) / (permutations + 1)
+    p_int = (num_greater_int + 1) / (permutations + 1)
+
+    return PermutationAnovaResult(
+        statistic_a=F_obs.statistic_a,
+        pvalue_a=p_a,
+        df_a=F_obs.df_a,
+        statistic_b=F_obs.statistic_b,
+        pvalue_b=p_b,
+        df_b=F_obs.df_b,
+        statistic_interaction=F_obs.statistic_interaction,
+        pvalue_interaction=p_int,
+        df_interaction=F_obs.df_interaction
+    )

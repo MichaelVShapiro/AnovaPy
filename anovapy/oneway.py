@@ -774,7 +774,7 @@ def f_permutation(
     permutations : int
         Number of permutations to run. Defaults to 999
     random_state : int | np.random.Generator | None
-        A seed to state for reproducible results
+        A seed to set for reproducible results
     nan_policy : {'propagate', 'omit', 'raise'}
         Defines how to handle input NaNs.
 
