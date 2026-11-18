@@ -235,7 +235,9 @@ Just like the `anovapy.oneway.f_permutation` function, you can also mess around 
 ```python
 res_perm = f_permutation(factor_a, factor_b, dependent, permutations=99)
 
-res_seed_and_perm = f_permutation(factor_a, factor_b, dependent, permutations=999, random_state=42)
+res_seed_and_perm = f_permutation(
+    factor_a, factor_b, dependent, permutations=999, random_state=42
+)
 ```
 
 Note that unlike a Permutation One Way ANOVA and PERMANOVA, a Two Way ANOVA has different permutation methods one can work with. Each shuffles data in a certain way which affects the outcome of the resulting p-value. Currently, AnovaPy supports the following methods:
@@ -247,11 +249,11 @@ Note that unlike a Permutation One Way ANOVA and PERMANOVA, a Two Way ANOVA has 
 You can set what method to use via the `method` parameter as shown below:
 
 ```python
-res_manly = f_permutation(factor_a, factor_b, dependent, method='manly')
+res_manly = f_permutation(factor_a, factor_b, dependent, method="manly")
 
-res_edgington = f_permutation(factor_a, factor_b, dependent, method='edgington')
+res_edgington = f_permutation(factor_a, factor_b, dependent, method="edgington")
 
-res_ter_braak = f_permutation(factor_a, factor_b, dependent, method='braak')
+res_ter_braak = f_permutation(factor_a, factor_b, dependent, method="braak")
 ```
 
 Note that if not set, `method` will default to `manly`.

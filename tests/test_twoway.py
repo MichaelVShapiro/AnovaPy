@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from anovapy.twoway import art, artc, f_twoway, scheirer, tukey_hsd, f_permutation
+from anovapy.twoway import art, artc, f_permutation, f_twoway, scheirer, tukey_hsd
 
 # note that expected values were run with R
 # various R packages were used for making test cases such as ARTool and rcompanion
@@ -321,6 +321,7 @@ def test_artc_interaction():
     np.testing.assert_allclose(res[2].statistic, 0.9, rtol=1e-2)
     np.testing.assert_allclose(res[2].p_value_adjusted, 0.4345, rtol=1e-2)
 
+
 def test_permutation():
     # note that tests were done against the R permuco package
     factor_a = np.array(
@@ -345,9 +346,13 @@ def test_permutation():
     dependent = np.array(
         [12.3, 14.5, 11.8, 16.1, 15.2, 17.0, 10.1, 11.2, 9.8, 10.2, 8.8, 7.8]
     )
-    res = f_permutation(factor_a=factor_a, factor_b=factor_b, dependent=dependent, random_state=42)
+    res = f_permutation(
+        factor_a=factor_a, factor_b=factor_b, dependent=dependent, random_state=42
+    )
 
-    res_stat_given = np.array([res.statistic_a, res.statistic_b, res.statistic_interaction])
+    res_stat_given = np.array(
+        [res.statistic_a, res.statistic_b, res.statistic_interaction]
+    )
     res_pval_given = np.array([res.pvalue_a, res.pvalue_b, res.pvalue_interaction])
 
     # once again, as stated in some other test cases, NumPy and R use different algorithms for generating random data
@@ -377,9 +382,17 @@ def test_permutation():
 
     # note that the R package permuco does not support the Edgington method
     # so for this particular test case the R package PermutationR which implements the logic
-    res3 = f_permutation(factor_a=factor_a, factor_b=factor_b, dependent=dependent, method='edgington', random_state=42)
+    res3 = f_permutation(
+        factor_a=factor_a,
+        factor_b=factor_b,
+        dependent=dependent,
+        method="edgington",
+        random_state=42,
+    )
 
-    res_stat_given = np.array([res3.statistic_a, res3.statistic_b, res3.statistic_interaction])
+    res_stat_given = np.array(
+        [res3.statistic_a, res3.statistic_b, res3.statistic_interaction]
+    )
     res_pval_given = np.array([res3.pvalue_a, res3.pvalue_b, res3.pvalue_interaction])
 
     res_pval_expected = np.array([0.05105105, 0.26926927, 0.59859860])
