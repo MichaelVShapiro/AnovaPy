@@ -12,3 +12,4 @@ Overall, all documentation in this folder is therefore defined strictly as follo
 - `MultivariateNormality.md` -> How to check if multivariate data is normally distributed. This is a critical assumption of MANOVA.
 - `Sphericity.md` -> How to check if data meets the sphericity assumption needed for tests like Repeated Measures ANOVA.
 - `BoxTest.md` -> refers to how to use Box's M-Test to check for homogeneity of covariance matrices across two or more groups, a critical assumption of MANOVA.
+- `NWayTest.md` -> How to run N-Way ANOVA including other "alternative" tests.

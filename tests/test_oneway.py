@@ -9,6 +9,8 @@ from statsmodels.formula.api import ols
 from anovapy.oneway import (
     BrownResult,
     RepeatedMeasuresAnovaResult,
+    art,
+    artc,
     brown,
     dunns,
     f_ancova,
@@ -238,3 +240,24 @@ def test_permutation_anova():
     res3 = f_permutation(*tutorial_samples, permutations=99, random_state=42)
     np.testing.assert_allclose(res3.statistic, 4.041667, rtol=1e-2)
     np.testing.assert_allclose(res3.pvalue, 0.32, atol=1)
+
+
+def test_art():
+    # simple test cases for art anova
+    res = art(*tutorial_samples)
+
+    np.testing.assert_allclose(res.statistic, 4.1769, rtol=1e-2)
+    np.testing.assert_allclose(res.pvalue, 0.041996, rtol=1e-2)
+
+    # also test artc automaticaly
+    # while the "global" p-value adjustment API is in progress, we will set this to none
+    # adjusting them regardless is pretty easy, we just need to make sure the unadjusted p-value is computed correctly most importantly
+    res = artc(*tutorial_samples, adjust="none")
+
+    assert len(res.statistic) == 3
+
+    expected_stats = np.array([-0.043, 2.481, 2.524])
+    expected_pvals = np.array([0.9666, 0.0289, 0.0267])
+
+    np.testing.assert_allclose(res.statistic, expected_stats, rtol=1e-2)
+    np.testing.assert_allclose(res.pvalue, expected_pvals, rtol=1e-2)

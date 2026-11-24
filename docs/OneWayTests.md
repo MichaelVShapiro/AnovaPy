@@ -12,6 +12,7 @@ The below table of contents summarizes all ANOVA-related tests supported by Anov
 - [Brown-Forsythe ANOVA Test](#brown-forsythe-anova-test)
 - [One Way Repeated Measures ANOVA](#one-way-repeated-measures-anova)
 - [One Way ANCOVA](#one-way-ancova)
+- [ART One Way ANOVA](#art-one-way-anova)
 
 ## Dunn's Post-Hoc
 
@@ -189,3 +190,44 @@ for i in range(len(res_more_covariate_example.covariate_stats)):
 ```
 
 Note that in `covariate_stats` and the associated `covariate_pvalues`, each item's index there is proportional to how the covariate was passed in. For example, in `res_more_covariate_example.covariate_stats`, F-statistic at index 0 refers to the F-statistic (and the accompanying p-value) for `covariate`, the F-statistic at index 1 refers to the F-statistic for `covariate2` and so on.
+
+## ART One Way ANOVA
+
+AnovaPy also implements the Aligned Rank Transform (ART) ANOVA for One Way designs.
+
+*Note: ART is primarily designed for factorial (Two Way and N-Way) ANOVA models. For One Way designs, consider Welch's ANOVA (`scipy.stats.f_oneway` with `equal_var=False`), Brown-Forsythe ANOVA (`anovapy.oneway.brown`), the Kruskal-Wallis test (`scipy.stats.kruskal`), or a Permutation One Way ANOVA (`anovapy.oneway.f_permutation`) depending on your data and assumptions. This function is included for API consistency across factorial/One Way workflows and parity with ARTool.*
+
+This can easily be run as follows:
+
+```python
+from anovapy.oneway import art
+
+sample1 = np.random.normal(size=100)
+sample2 = np.random.normal(size=100)
+sample3 = np.random.normal(size=100)
+
+res = art(sample1, sample2, sample3)
+
+print(f"F-Statistic: {res.statistic}, p-value: {res.pvalue}")
+```
+
+You can also run the post-hoc, ART-Contrast, as follows:
+
+```python
+from anovapy.oneway import artc
+
+res = artc(sample1, sample2, sample3)
+
+for i in range(len(res.statistic)):
+    print(
+        f"For comparison: {res.comparisons[i]}, t-Statistic: {res.statistic[i]} and p-value: {res.pvalue[i]}"
+    )
+```
+
+Once again, like with other post-hoc tests implemented in AnovaPy, you can mess around with the `adjust` parameter to adjust the p-value in any way you like:
+
+```python
+res_holm = artc(sample1, sample2, sample3, adjust="holm")
+```
+
+If not explicitly set, `adjust` will default to `'bonferroni'`.

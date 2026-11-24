@@ -75,7 +75,7 @@ for i in range(len(tukey_res_interaction.comparisons)):
 
 If the `term` parameter is not specified, it will default to `factor_a`.
 
-*Note: unlike SciPy stats `tukey_hsd` (see `scipy.stats.tukey_hsd`) which is designed to handle the post-hoc test for a One Way ANOVA and features the `confidence_inveral` function as a part of its result, as of v0.1 in AnovaPy, there is no such `confidence_interval` function yet, though there are plans to implement this in the future!*
+*Note: unlike SciPy stats `tukey_hsd` (see `scipy.stats.tukey_hsd`) which is designed to handle the post-hoc test for a One Way ANOVA and features the `confidence_interval` function as a part of its result, as of v0.1 in AnovaPy, there is no such `confidence_interval` function yet, though there are plans to implement this in the future!*
 
 ## Scheirer-Ray-Hare Test
 

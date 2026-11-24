@@ -6,13 +6,18 @@ from __future__ import annotations
 
 from collections import namedtuple
 from dataclasses import dataclass
+from itertools import combinations
 from typing import Literal
 
 import numpy as np
 from scipy.linalg import helmert
-from scipy.stats import f, f_oneway, norm, rankdata, ttest_rel
+from scipy.stats import f, f_oneway, norm, rankdata, t, ttest_rel
+
+from anovapy.p_adjust import PValueAdjustmentMethod, adjust_pvalue
 
 __all__ = [
+    "art",
+    "artc",
     "brown",
     "dunns",
     "f_ancova",
@@ -26,6 +31,7 @@ RepeatedMeasuresAnovaResult = namedtuple(
     "RepeatedMeasuresAnovaResult", ["statistic", "pvalue"]
 )
 F_permutationResult = namedtuple("F_permutationResult", ["statistic", "pvalue"])
+ArtResult = namedtuple("ArtResult", ["statistic", "pvalue"])
 
 
 @dataclass
@@ -78,6 +84,26 @@ class DunnsResult:
 
 
 @dataclass
+class ArtCResult:
+    """
+    Result of `anovapy.oneway.artc`.
+
+    Attributes
+    ----------
+    comparisons : list[tuple[int, int]]
+        All comparisons being made.
+    statistic : np.ndarray
+        All computed t-statistics
+    pvalue : np.ndarray
+        All computed p-values
+    """
+
+    comparisons: list[tuple[int, int]]
+    statistic: np.ndarray
+    pvalue: np.ndarray
+
+
+@dataclass
 class AdjustedTTestResult:
     """
     Result of `anovapy.oneway.adjusted_ttest`.
@@ -96,7 +122,7 @@ class AdjustedTTestResult:
 
 def dunns(
     *samples: np.typing.ArrayLike,
-    adjust: Literal["bonferroni", "holm", "sidak", "benjamini", "none"] = "bonferroni",
+    adjust: PValueAdjustmentMethod = "bonferroni",
     nan_policy: Literal["propagate", "omit", "raise"] = "propagate",
 ) -> DunnsResult:
     """
@@ -122,8 +148,7 @@ def dunns(
         A dataclass containing:
         - `comparisons` : A tuple that contains two numbers representing the index of the groups being compared. Note that this index is relative to how the groups were passed into the function.
         - `statistic` : Computed Z-statistics for each comparison
-        - `p_value_unadjusted` : Unadjusted p-value
-        - `p_value_adjusted` : Adjusted p-value (based on what was set in `adjust`)
+        - `pvalue` : Computed p-value based on the `method` selected
 
     References
     ----------
@@ -141,9 +166,7 @@ def dunns(
             raise ValueError("Input contains NaN values.")
         if nan_policy == "propagate":
             return DunnsResult(
-                statistic=np.array(np.nan),
-                p_value_unadjusted=np.array(np.nan),
-                p_value_adjusted=np.array(np.nan),
+                comparisons=[], statistic=np.array(np.nan), pvalue=np.array(np.nan)
             )
         samples = samples[~np.isnan(samples)]
 
@@ -191,50 +214,8 @@ def dunns(
             res_pvals_unadjusted.append(p_unadj)
 
     # now adjust all p-values
-    m = len(res_pvals_unadjusted)
     res_pvals_unadjusted = np.array(res_pvals_unadjusted)
-    if adjust == "bonferroni":
-        for k in res_pvals_unadjusted:
-            res_pvals_adjusted.append(min(1.0, k * m))
-    elif adjust == "holm":
-        order = np.argsort(res_pvals_unadjusted)
-        sorted_p = res_pvals_unadjusted[order]
-
-        adjusted_sorted = np.minimum(
-            np.maximum.accumulate(sorted_p * (m - np.arange(m))), 1.0
-        )
-
-        adjusted = np.empty_like(adjusted_sorted)
-        adjusted[order] = adjusted_sorted
-
-        res_pvals_adjusted = adjusted
-    elif adjust == "sidak":
-        for i in res_pvals_unadjusted:
-            res_pvals_adjusted.append(1 - (1 - i) ** m)
-    elif adjust == "benjamini":
-        # sort in ascending
-        sorted_idx = np.argsort(res_pvals_unadjusted)
-        # p_sorted = res_pvals_unadjusted[sorted_idx]
-        p_sorted = np.sort(res_pvals_unadjusted)
-
-        # compute m * p_sorted / rank  (rank = 1, 2, ..., m)
-        ranks = np.arange(1, m + 1, dtype=float)
-        raw = m * p_sorted / ranks
-
-        # enforce monotonicity via cumulative min from the right
-        # (this is the min_{j >= i} in the formula)
-        adjusted_sorted = np.minimum.accumulate(raw[::-1])[::-1]
-
-        # cap at 1
-        adjusted_sorted = np.minimum(adjusted_sorted, 1.0)
-
-        # map back to original order
-        adjusted = np.empty(m)
-        adjusted[sorted_idx] = adjusted_sorted
-
-        res_pvals_adjusted = adjusted
-    else:  # none
-        res_pvals_adjusted = res_pvals_unadjusted.copy()
+    res_pvals_adjusted = adjust_pvalue(res_pvals_unadjusted, adjust)
 
     # now return
     return DunnsResult(
@@ -503,7 +484,7 @@ def f_repeated(
 
 def pairwise_ttest(
     *samples: np.typing.ArrayLike,
-    adjust: Literal["bonferroni", "holm", "none"] = "bonferroni",
+    adjust: PValueAdjustmentMethod = "bonferroni",
     nan_policy: Literal["propagate", "omit", "raise"] = "propagate",
 ) -> AdjustedTTestResult:
     """
@@ -514,10 +495,7 @@ def pairwise_ttest(
     *samples : array_like
         Sample measurments for each groups.
     adjust : {'bonferroni', 'holm', 'none'}
-        How p-values should be adjusted. Defaults to 'bonferroni'
-        - 'bonferroni' : Adjusts p-values with the Bonferroni method. This is most commonly used (hence calling the test a Bonferroni-adjusted paired t-test)
-        - 'holm' : Adjusts p-values with the Holm-Bonferroni method (i.e. Holm corrected paired t-test)
-        - 'none' : Do not adjust the p-value
+        A valid p-value adjustment method as defined in `anovapy.p_adjust.PValudAdjustmentMethod`.
     nan_policy : {'propagate', 'omit', 'raise'}
         Defines how to handle inputs with NaN values.
 
@@ -533,8 +511,6 @@ def pairwise_ttest(
     samples = np.asarray(samples)
 
     # validate
-    if adjust not in {"bonferroni", "holm", "none"}:
-        raise ValueError("adjust must be one of {'bonferroni', 'holm', 'none'}.")
     if nan_policy not in {"propagate", "omit", "raise"}:
         raise ValueError("nan_policy must be one of {'propagate', 'omit', 'raise'}.")
 
@@ -564,24 +540,8 @@ def pairwise_ttest(
             pvals.append(res.pvalue)
 
     # now adjust
-    m = len(pvals)
     pvals = np.array(pvals)
-    adjusted = []
-    if adjust == "bonferroni":
-        for k in pvals:
-            adjusted.append(min(1.0, k * m))
-    elif adjust == "holm":
-        order = np.argsort(pvals)
-        sorted_p = pvals[order]
-
-        adjusted_sorted = np.minimum(
-            np.maximum.accumulate(sorted_p * (m - np.arange(m))), 1.0
-        )
-
-        adjusted = np.empty_like(adjusted_sorted)
-        adjusted[order] = adjusted_sorted
-    else:  # none
-        adjusted = pvals
+    adjusted = adjust_pvalue(pvals, adjust)
 
     return AdjustedTTestResult(statistic=np.array(stats), pvalue=np.array(adjusted))
 
@@ -841,3 +801,180 @@ def f_permutation(
     p_value = (np.sum(F_perm >= F_obs) + 1) / (permutations + 1)
 
     return F_permutationResult(statistic=F_obs, pvalue=p_value)
+
+
+def art(
+    *samples: np.typing.ArrayLike,
+    nan_policy: Literal["propagate", "omit", "raise"] = "propagate",
+) -> ArtResult:
+    """
+    Performs Aligned Rank Transform (ART) One Way ANOVA.
+
+    This can be used when assumptions of One Way ANOVA are not met.
+
+    Parameters
+    ----------
+    *samples : array_like
+        The sample measurements for each group. There must be at least two arguments.
+    nan_policy : {'propagate', 'omit', 'raise'}
+        Defines how to handle input NaNs.
+
+    Returns
+    -------
+    statistic : float
+        The F-Statistic
+    pvalue : float
+        The computed p-value
+
+    Notes
+    -----
+    The Aligned Rank Transform (ART) was originally developed for factorial
+    (Two Way and N-Way) designs where standard rank tests like Kruskal-Wallis
+    do not directly extend to interaction effects. In a One Way design,
+    methods such as Welch's ANOVA, Brown-Forsythe ANOVA, Kruskal-Wallis, or
+    permutation ANOVA are more commonly used depending on your assumptions
+    and hypotheses.
+
+    This One Way implementation is provided for completeness, consistency with
+    `anovapy.twoway.art` and `anovapy.nway.art`, and parity with `ARTool`.
+
+    References
+    ----------
+    .. [1] Wobbrock, J. O., Findlater, L., Gergle, D., & Higgins, J. J. (2011). The aligned rank transform for nonparametric factorial analyses using only ANOVA procedures. Proceedings of the SIGCHI Conference on Human Factors in Computing Systems, 143-146. https://doi.org/10.1145/1978942.1978963
+    """
+    samples = np.asarray(samples)
+
+    # validate
+    if nan_policy not in {"propagate", "omit", "raise"}:
+        raise ValueError("nan_policy must be one of {'propagate', 'omit', 'raise'}.")
+
+    # check nan
+    has_nan = np.isnan(samples).any()
+    if has_nan:
+        if nan_policy == "propagate":
+            return ArtResult(statistic=np.nan, pvalue=np.nan)
+        elif nan_policy == "raise":
+            raise ValueError("Input contains NaN values.")
+        # omit
+        samples = samples[~np.isnan(samples)]
+
+    # first compute residual
+    # compute cells means
+    cell_means = np.mean(samples, axis=0)
+
+    residual = samples - cell_means[np.newaxis, :]
+
+    # one way effect formula: A_i - grand_mean
+    # we already have A_i computed since there is only one independent variable so it is easy to put together
+    grand_mean = np.mean(samples)
+    A_i = cell_means - grand_mean
+    # compute aligned response
+    Y_prime = residual + A_i
+    # assign ranks
+    Y_double_prime = rankdata(Y_prime.flatten(), method="average")
+
+    # now we perform anova right on this
+    p = Y_double_prime.reshape(
+        samples.shape
+    ).tolist()  # so we can forward it to SciPy easily
+    res = f_oneway(*p)
+
+    return ArtResult(statistic=res.statistic, pvalue=res.pvalue)
+
+
+def artc(
+    *samples: np.typing.ArrayLike,
+    adjust: PValueAdjustmentMethod = "bonferroni",
+    nan_policy: Literal["propagate", "omit", "raise"] = "propagate",
+) -> ArtCResult:
+    """
+    Runs the Aligned Rank Transform-Contrast (ART-C) post-hoc to ART ANOVA (see `anovapy.oneway.art`).
+
+    Parameters
+    ----------
+    *samples : array_like
+        All observations
+    adjust : PValueAdjustmentMethod
+        A valid p-value adjustment method as defined in `anovapy.p_adjust.PValudAdjustmentMethod`.
+    nan_policy : {'propagate', 'omit', 'raise'}
+        Defines how to handle inputs with NaN values.
+
+    Returns
+    -------
+    ArtCResult
+        A dataclass with the comparisons, statistics, and computed p-values.
+
+    References
+    ----------
+    .. [1] Elkin, L. A., Kay, M., Higgins, J. J., & Wobbrock, J. O. (2021). An aligned rank transform procedure for multifactor contrast tests. The 34th Annual ACM Symposium on User Interface Software and Technology. https://doi.org/10.1145/3472749.3474784
+    """
+    # validate
+    if nan_policy not in {"propagate", "omit", "raise"}:
+        raise ValueError("nan_policy must be one of {'propagate', 'omit', 'raise'}.")
+
+    # handle nan
+    cleaned_samples = []
+    for s in samples:
+        arr = np.asarray(s)
+        if arr.ndim != 1:
+            raise ValueError("Each sample must a 1D array.")
+
+        has_nan = np.isnan(arr).any()
+        if has_nan:
+            if nan_policy == "propagate":
+                return ArtCResult(comparisons=[], statistic=[], pvalue=[])
+            elif nan_policy == "raise":
+                raise ValueError("The input contains NaN values.")
+            arr = arr[~np.isnan(arr)]
+
+        if len(arr) == 0:
+            raise ValueError(
+                "Each sample must contain at least one non-NaN observation."
+            )
+        cleaned_samples.append(arr)
+
+    k = len(cleaned_samples)
+    counts = np.array([len(s) for s in cleaned_samples])
+    N = int(np.sum(counts))
+    df_res = N - k  # degrees of freedom error
+
+    # in the paper, the first step is to concatenate factors
+    # however, since we are dealing with a one way design here, there is only one independent variable
+    # hence there is nothing to concatenate at all!!
+    # we can basically already rank the data
+    y = np.concatenate(
+        cleaned_samples
+    )  # basically merge all data into one big array representing the single dependent variable
+    group_idx = np.repeat(
+        np.arange(k), counts
+    )  # just keeping track of indecies each group has in the merged array
+    y_ranked = rankdata(y, method="average")  # rank all items in the dependent variable
+
+    # now compute group mean ranks and pooled MSE across all groups
+    group_sums = np.bincount(group_idx, weights=y_ranked)
+    group_means = group_sums / counts
+
+    fitted = group_means[group_idx]
+    sse = np.sum((y_ranked - fitted) ** 2)  # sum of squares error (residual)
+    mse = sse / df_res
+
+    # now do pairwise contrasts using pooled residual variance
+    comparisons = list(combinations(range(k), 2))
+    # all this info is to be filled next
+    res_stats = np.empty(len(comparisons))
+    res_pvals = np.empty(len(comparisons))
+    # res_df = [df_res] * len(comparisons)
+
+    for idx, (i, j) in enumerate(comparisons):
+        # compute t-statistic
+        estimate = group_means[i] - group_means[j]
+        se = np.sqrt(mse * (1.0 / counts[i] + 1.0 / counts[j]))
+        t_stat = estimate / se
+
+        res_stats[idx] = t_stat
+        res_pvals[idx] = 2.0 * t.sf(np.abs(t_stat), df_res)
+
+    # now adjust p-values as needed
+    res_pvals = adjust_pvalue(res_pvals, adjust)
+
+    return ArtCResult(comparisons=comparisons, statistic=res_stats, pvalue=res_pvals)
