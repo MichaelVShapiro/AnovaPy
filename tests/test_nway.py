@@ -9,7 +9,57 @@ import pandas as pd
 import statsmodels.api as sm
 from statsmodels.formula.api import ols
 
-from anovapy.nway import art, f_nway
+from anovapy.nway import art, f_nway, tukey_hsd
+
+# some data being reused
+# it is from: https://www.statology.org/three-way-anova-python/
+height = np.array(
+    [
+        7,
+        7,
+        8,
+        8,
+        7,
+        6,
+        6,
+        5,
+        6,
+        5,
+        5,
+        5,
+        4,
+        5,
+        4,
+        3,
+        3,
+        4,
+        3,
+        3,
+        6,
+        6,
+        5,
+        4,
+        5,
+        4,
+        5,
+        4,
+        4,
+        3,
+        2,
+        2,
+        1,
+        4,
+        4,
+        2,
+        1,
+        1,
+        2,
+        1,
+    ]
+)
+program = np.repeat([1, 2], 20)
+gender = np.tile(np.repeat(["M", "F"], 10), 2)
+division = np.tile(np.repeat([1, 2], 5), 4)
 
 
 def test_nway():
@@ -46,54 +96,6 @@ def test_nway():
 def test_art():
     # for art we have to manually test it
     # let's try three way art anova
-    # we will utilize the same data here: https://www.statology.org/three-way-anova-python/
-    height = np.array(
-        [
-            7,
-            7,
-            8,
-            8,
-            7,
-            6,
-            6,
-            5,
-            6,
-            5,
-            5,
-            5,
-            4,
-            5,
-            4,
-            3,
-            3,
-            4,
-            3,
-            3,
-            6,
-            6,
-            5,
-            4,
-            5,
-            4,
-            5,
-            4,
-            4,
-            3,
-            2,
-            2,
-            1,
-            4,
-            4,
-            2,
-            1,
-            1,
-            2,
-            1,
-        ]
-    )
-    program = np.repeat([1, 2], 20)
-    gender = np.tile(np.repeat(["M", "F"], 10), 2)
-    division = np.tile(np.repeat([1, 2], 5), 4)
 
     res = art(program, gender, division, dependent=height)
 
@@ -115,3 +117,111 @@ def test_art():
 
     np.testing.assert_allclose(res.statistic, expected_stats, rtol=1e-2)
     np.testing.assert_allclose(res.pvalue, expected_pvals, rtol=1e-2)
+
+
+def test_tukey():
+    # this was all tested against R's TukeyHSd function
+    # same data is reused as the test_art function
+    res = tukey_hsd(program, gender, division, dependent=height)
+
+    # TukeyHSD in R only gives p-value not stat
+    # though if the p-value is correct, most likely the stat is correct too
+    expected_pvals = np.array([2.984e-09])
+
+    np.testing.assert_allclose(res.pvalue, expected_pvals, rtol=1e-5, atol=1e-10)
+
+    res = tukey_hsd(program, gender, division, dependent=height, term=(1,))
+
+    expected_pvals = np.array([1.824e-12])
+
+    np.testing.assert_allclose(res.pvalue, expected_pvals, rtol=1e-5, atol=1e-10)
+
+    res = tukey_hsd(program, gender, division, dependent=height, term=(2,))
+
+    expected_pvals = np.array([1.2e-06])
+
+    np.testing.assert_allclose(res.pvalue, expected_pvals, rtol=1e-4, atol=1e-12)
+
+    res = tukey_hsd(program, gender, division, dependent=height, term=(0, 1))
+
+    # expected_pvals = np.array([0.0000137, 0.0000000, 0.1714595, 0.0000000, 0.0000000, 0.0000137])
+    expected_pvals = np.array(
+        [
+            0.000013724666194,
+            0.000000035719319,
+            0.171459503666604,
+            0.000000000000145,
+            0.000000035719319,
+            0.000013724666194,
+        ]
+    )
+
+    np.testing.assert_allclose(
+        np.sort(res.pvalue), np.sort(expected_pvals), rtol=1e-5, atol=1e-10
+    )
+
+    res = tukey_hsd(program, gender, division, dependent=height, term=(0, 2))
+
+    expected_pvals = np.array(
+        [0.0000024, 0.0001863, 0.0000000, 0.4449346, 0.0053072, 0.0000783]
+    )
+
+    np.testing.assert_allclose(
+        np.sort(res.pvalue), np.sort(expected_pvals), rtol=1e-5, atol=1e-10
+    )
+
+    res = tukey_hsd(program, gender, division, dependent=height, term=(1, 2))
+
+    expected_pvals = np.array(
+        [
+            0.000000015820160,
+            0.002360361206795,
+            0.005307217009861,
+            0.000000000001242,
+            0.000439937107696,
+            0.000000081508206,
+        ]
+    )
+
+    np.testing.assert_allclose(
+        np.sort(res.pvalue), np.sort(expected_pvals), rtol=1e-5, atol=1e-10
+    )
+
+    res = tukey_hsd(program, gender, division, dependent=height, term=(0, 1, 2))
+
+    expected_pvals = np.array(
+        [
+            0.003680733885891,
+            0.000030004972385,
+            0.899866256804302,
+            0.088565352450705,
+            0.000002672021465,
+            0.417272240944154,
+            0.899866256804304,
+            0.000000000348096,
+            0.000101454694615,
+            0.899866256804303,
+            0.208433704707262,
+            0.000008910056032,
+            0.088565352450705,
+            0.001136473365062,
+            0.000000008442450,
+            0.000000000001196,
+            0.011424084598022,
+            0.000000812746538,
+            0.003680733885891,
+            0.000000079401271,
+            0.988215595664208,
+            0.208433704707262,
+            0.011424084598022,
+            0.000341840597100,
+            0.683723132886212,
+            0.000000008442450,
+            0.000101454694615,
+            0.033274417299843,
+        ]
+    )
+
+    np.testing.assert_allclose(
+        np.sort(res.pvalue), np.sort(expected_pvals), rtol=1e-5, atol=1e-10
+    )

@@ -106,6 +106,51 @@ For example, if we examine the response of `res.effect[0]` we will find how it h
 
 The final most important thing to note about this function is that it should **NOT** be used for handling Two Way designs (i.e. Two Way ANOVA). Use `anovapy.twoway.f_twoway` which is optimized for handling Two Way designs.
 
+AnovaPy also implements the Tukey HSD post-hoc test for N-Way designs via the `anovapy.nway.tukey_hsd` function. In an N-Way design, you rarely want to run post-hoc comparisons on every main effect and interaction at once (especially considering how some may not have shown to be significant when running the N-Way ANOVA). `anovapy.nway.tukey_hsd` lets you target a specific effect using the `term` parameter.
+
+Pass your independent factors positionally, and pass a tuple of their 0-based indices to `term` to specify which main effect or interaction to test:
+
+```python
+from anovapy.nway import tukey_hsd
+
+# we will reuse the same factors as before
+# as a reminder it is: program (0), gender (1), and division (2)
+# lets test the main effect of 'program' (index 0)
+res_main = tukey_hsd(program, gender, division, dependent=height, term=(0,))
+
+# now lets test the 2-way interaction between 'gender' (1) and 'division' (2)
+res_2way = tukey_hsd(program, gender, division, dependent=height, term=(1, 2))
+
+# now lets test the 2-way interaction between 'program' (0) and 'division' (2)
+res_alt_2way = tukey_hsd(program, gender, division, dependent=height, term=(0, 2))
+
+# let test the 3-way interaction across all factors
+res_3way = tukey_hsd(program, gender, division, dependent=height, term=(0, 1, 2))
+
+# finally lets see the results
+for comp, q_stat, p_val in zip(
+    res_main.comparisons, res_main.statistic, res_main.pvalue
+):
+    print(f"For comparison {comp}: Q-Statistic = {q_stat:.3f}, p-value = {p_val:.4f}")
+```
+
+A word on the return result for `anovapy.nway.tukey_hsd`. The function returns a dataclass where elements at the same index `i` across `comparisons`, `statistic`, and `pvalue` always correspond to the same comparison.
+
+Rather than joining factor labels into a single string (like `"A1:B1"`), each entry in `res.comparisons` is structured as `(group_a, group_b)`, where both `group_a` and `group_b` are tuples of factor levels matching the order of indices in `term`:
+
+- **Main effect** (`term=(0,)`): `(('ProgramA',), ('ProgramB',))`
+- **2-Way Interaction** (`term=(1, 2)`): `(('Female', 'East'), ('Male', 'East'))`
+- **3-Way Interaction** (`term=(0, 1, 2)`): `(('ProgramA', 'Female', 'East'), ('ProgramB', 'Female', 'East'))`
+
+Because the levels stay separated in tuples, you can format or unpack them however you want:
+
+```python
+for (g1, g2), q_stat, p_val in zip(res.comparisons, res.statistic, res.pvalue):
+    left = " : ".join(map(str, g1))
+    right = " : ".join(map(str, g2))
+    print(f"{left} vs {right} -> Q-Statistic={q_stat:.3f}, p-value={p_val:.4f}")
+```
+
 ## ART ANOVA
 
 In case assumptions for N-Way ANOVA are not met, AnovaPy implements the Aligned Rank Transform (ART) ANOVA. This can easily be achieved as follows:

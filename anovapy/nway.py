@@ -3,12 +3,12 @@
 
 from dataclasses import dataclass
 from itertools import combinations
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
-from scipy.stats import f, rankdata
+from scipy.stats import f, rankdata, studentized_range
 
-__all__ = ["art", "f_nway"]
+__all__ = ["art", "f_nway", "tukey_hsd"]
 
 
 @dataclass
@@ -56,11 +56,39 @@ class ArtNWayResult:
         Degrees of Freedom Error (residual)
     """
 
-    effect: list[tuple[str]]
+    effect: list[tuple[str, ...]]
     statistic: list[float]
     pvalue: list[float]
     df: np.ndarray
     df_error: int
+
+
+@dataclass
+class TukeyResult:
+    """
+    Result of `anovapy.nway.tukey_hsd`.
+
+    Each entry at index `i` across `comparisons`, `statistic`, and
+    `pvalue` corresponds to a single pairwise comparison.
+
+    Attributes
+    ----------
+    comparisons : list of tuple of tuple
+        Pairwise comparisons formatted as `(group_a, group_b)`, where
+        `group_a` and `group_b` are tuples of factor levels ordered
+        according to `term`. For example, a 2-way interaction yields
+        `((level_1a, level_2a), (level_1b, level_2b))`.
+    statistic : np.ndarray
+        1D array of computed Tukey Q-statistics corresponding to each
+        entry in `comparisons`.
+    pvalue : np.ndarray
+        1D array of computed p-values corresponding to each entry in
+        `comparisons`.
+    """
+
+    comparisons: list[tuple[Any, ...]]
+    statistic: np.ndarray
+    pvalue: np.ndarray
 
 
 def _encode_factor(factor: np.ndarray) -> np.ndarray:
@@ -172,6 +200,95 @@ def _compute_nway_type1(factors: list[np.ndarray], y: np.ndarray):
     return tuple(effects), np.array(f_stats), np.array(p_vals), np.array(dfs), df_error
 
 
+def _compute_only_mse(factors: list[np.ndarray], y: np.ndarray) -> tuple[float, int]:
+    """
+    This is an optimized function to compute the Mean Squared Error (MSE) and the Degrees of Freedom Error (residual).
+
+    It is a helper function for `anovapy.nway.tukey_hsd`.
+
+    The difference between this function and `anovapy.nway._compute_nway_type1` is that this one is explicitly optimized to **only** compute the MSE. Since Tukey's HSD only needs the MSE and no other Sum of Squares, we don't have to go through all the complexity of computing the MSE in `_compute_nway_type1`, we can compute the same MSE in O(n) time.
+
+    Parameters
+    ----------
+    factors : list[np.ndarray]
+        All independent variables
+    y : np.ndarray
+        The dependent variable
+
+    Returns
+    -------
+    A tuple containing the computed MSE and Degrees of Freedom Error
+    """
+    # first get all unique items across all factors
+    encoded = [np.unique(f, return_inverse=True)[1] for f in factors]
+    combo_matrix = np.column_stack(encoded)
+    unique_cells, cell_ids = np.unique(combo_matrix, axis=0, return_inverse=True)
+
+    n_cells = len(unique_cells)
+    n_obs = len(y)
+    df_error = n_obs - n_cells
+
+    # now compute cell means
+    counts = np.bincount(cell_ids, minlength=n_cells)
+    cell_means = np.bincount(cell_ids, weights=y, minlength=n_cells) / counts
+
+    # now subtract each observation's cell mean from y and square
+    residuals = y - cell_means[cell_ids]
+    ss_error = np.dot(residuals, residuals)
+    ms_error = ss_error / df_error
+
+    return float(ms_error), int(df_error)
+
+
+def _group_means_and_counts(
+    factors: list[np.ndarray],
+    y: np.ndarray,
+    term: tuple[int, ...],
+):
+    """
+    Another helper function for `anovapy.nway.tukey_hsd`.
+
+    For each independent variable (and the selected term), this function computes the respective group mean.
+
+    Parameters
+    ----------
+    factors : list[np.ndarray]
+        All independent variables
+    dependent : np.ndarray
+        The dependent variable
+    term : tuple[int, ...]
+        The term being analyzed
+
+    Returns
+    -------
+    The unique items in each factor, computed means, and counts
+    """
+    # first encode each selected factor into integer codes 0 .. L_k - 1
+    unique_per_factor = [
+        np.unique(factors[idx]) for idx in term
+    ]  # this is important for the actually identifying each unique value directly
+    encoded = [np.unique(factors[idx], return_inverse=True)[1] for idx in term]
+    # now stack into shape (n_obs, len(term)) and find unique combinations (cells/levels)
+    combo_matrix = np.column_stack(encoded)
+    unique_combos, group_ids = np.unique(combo_matrix, axis=0, return_inverse=True)
+
+    n_groups = len(unique_combos)
+    counts = np.bincount(group_ids, minlength=n_groups)
+    if np.any(counts == 0):
+        raise ValueError(f"Empty cell encountered for term {term}.")
+
+    sums = np.bincount(group_ids, weights=y, minlength=n_groups)
+    means = sums / counts
+
+    # make sure we can identify each label later
+    level_labels: list[tuple[Any, ...]] = [
+        tuple(unique_per_factor[col_idx][int(code)] for col_idx, code in enumerate(row))
+        for row in unique_combos
+    ]
+
+    return unique_combos, level_labels, means, counts
+
+
 def f_nway(
     *factors: np.typing.ArrayLike,
     dependent: np.typing.ArrayLike,
@@ -259,6 +376,127 @@ def f_nway(
     )
 
 
+def tukey_hsd(
+    *factors: np.typing.ArrayLike,
+    dependent: np.typing.ArrayLike,
+    term: tuple[int, ...] = (0,),
+    nan_policy: Literal["propagate", "omit", "raise"] = "propagate",
+) -> TukeyResult:
+    """
+    Performs Tukey's HSD for N-Way designs.
+
+    Parameters
+    ----------
+    *factors : array_like
+        Factor arrays representing the independent variables. Their positional
+        order defines the 0-based indices used in `term`.
+    dependent : array_like
+        The dependent variable
+    term : tuple
+        Non-empty tuple of 0-based factor indices specifying which main effect
+        or interaction to test. For example, `(0,)` tests the first factor,
+        `(0, 2)` tests the interaction between the first and third factors,
+        and `(0, 1, 2)` tests the three-way interaction. Defaults to `(0,)`.
+    nan_policy : {'propagate', 'omit', 'raise'}
+        Defines how to handle inputs with NaN values.
+
+    Returns
+    -------
+    TukeyResult
+        Dataclass containing `comparisons`, `statistic` (Q-statistics),
+        and `pvalue` for each tested pair.
+
+    Raises
+    ------
+    ValueError
+        If fewer than three factors are provided.
+
+    Notes
+    -----
+    If needed, this function will automatically apply the Tukey-Kramer adjustment.
+
+    When comparing against R's `TukeyHSD`, test statistics match closely,
+    but very small p-values (e.g. on the order of `1e-12`) may show minor
+    differences due to numerical integration differences between SciPy's
+    `studentized_range` (see `scipy.stats.studentized_range`) and R's internal studentized range calculation.
+    Practical conclusions and relative ordering of comparisons remain consistent.
+
+    References
+    ----------
+    .. [1] Tukey, John W. "Comparing Individual Means in the Analysis of Variance." Biometrics, vol. 5, no. 2, JSTOR, June 1949, p. 99, https://doi.org/10.2307/3001913. Accessed 11 Nov. 2026.
+    """
+    factors = np.asarray(factors)
+    dependent = np.asarray(dependent)
+
+    # validate
+    if nan_policy not in {"propagate", "omit", "raise"}:
+        raise ValueError("nan_policy must be one of {'propagate', 'omit', 'raise'}.")
+
+    if len(factors) == 2:
+        raise ValueError(
+            "At least three factors are needed but only two were passed in; for two factors, make a call to `anovapy.twoway.tukey_hsd` which is optimized for Two Way Designs."
+        )
+    elif len(factors) < 3:
+        raise ValueError(
+            "At least three factors are needed to compute Tukey's HSD for N-Way designs."
+        )
+
+    if len(term) == 0:
+        raise ValueError(
+            "Cannot compute Tukey's HSD because no term is being analyzed!"
+        )
+
+    # handle nan
+    has_nan = np.isnan(dependent).any()
+    if has_nan:
+        if nan_policy == "propagate":
+            return TukeyResult(
+                comparisons=[], statistic=np.array(np.nan), pvalue=np.array(np.nan)
+            )
+        elif nan_policy == "raise":
+            raise ValueError("Input contains NaN values.")
+        # omit
+        mask = np.isnan(dependent)
+        dependent = dependent[~mask]
+        for i in range(len(factors)):
+            factors[i] = factors[i][~mask]
+
+    # the overall logic is the same as computing Tukey HSD with One Way or Two Way designs
+    # get all items we are trying to analyze (which we will compute the mean of)
+    # and compute the MS Error
+    # computing that requires computing sum of squares error (residual) and degrees of freedom error
+    # once again though, the same problem arises -- complexity
+    # depending on how many terms are being analyzed, this can explode
+    # let's first compute the mean squared error (MSE)
+    mse, df_err = _compute_only_mse(factors, dependent)
+
+    # now get group labels, means, and counts for the specific `term` in O(n) time
+    unique_levels, level_labels, means, counts = _group_means_and_counts(
+        factors, dependent, term
+    )
+    n_groups = len(unique_levels)
+
+    # apply the Tukey-Kramer adjustment if lengths between comparisons are not the same
+    pairs = np.array(
+        list(combinations(range(n_groups), 2)), dtype=int
+    )  # generate all possible effects to analyze as needed
+    idx_a, idx_b = pairs[:, 0], pairs[:, 1]
+
+    n_a, n_b = counts[idx_a], counts[idx_b]
+    mean_diff = np.abs(means[idx_a] - means[idx_b])
+    se = np.sqrt(mse * 0.5 * (1.0 / n_a + 1.0 / n_b))
+    q_stats = mean_diff / se
+    p_values = studentized_range.sf(q_stats, n_groups, df_err)
+
+    # now we just need to map back idx_a and idx_b back to the original level names
+    # that way in the return result we know exactly what each statistic and p-value corresponds to!
+    comparisons: list[tuple[tuple[Any, ...], tuple[Any, ...]]] = [
+        (level_labels[int(a)], level_labels[int(b)]) for a, b in zip(idx_a, idx_b)
+    ]
+
+    return TukeyResult(comparisons=comparisons, statistic=q_stats, pvalue=p_values)
+
+
 def art(
     *factors: np.typing.ArrayLike,
     dependent: np.typing.ArrayLike,
@@ -266,6 +504,8 @@ def art(
 ) -> ArtNWayResult:
     """
     Performs the Aligned Rank Transform (ART) N-Way ANOVA.
+
+    This can be used when assumptions for N-Way ANOVA are not met.
 
     Parameters
     ----------
