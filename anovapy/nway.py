@@ -12,7 +12,7 @@ from scipy.stats import f, rankdata, studentized_range, t
 
 from anovapy.p_adjust import PValueAdjustmentMethod, adjust_pvalue
 
-__all__ = ["art", "f_nway", "tukey_hsd"]
+__all__ = ["art", "artc", "f_nway", "f_permutation", "tukey_hsd"]
 
 
 @dataclass
