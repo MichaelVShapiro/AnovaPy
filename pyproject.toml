@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "anovapy"
-version = "0.1"
+version = "0.2"
 license = "MIT"
 license-files = ["LICENSE"]
 readme = "README.md"

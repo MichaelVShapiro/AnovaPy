@@ -6,6 +6,7 @@ AnovaPy implements a pretty easy way to run Three Way ANOVA, Four Way ANOVA, and
 
 - [N-Way ANOVA](#n-way-anova)
 - [ART ANOVA](#art-anova)
+- [Permutation N-Way ANOVA](#permutation-n-way-anova)
 
 ## N-Way ANOVA
 
@@ -164,3 +165,54 @@ res_art = art(program, gender, division, dependent=height)
 Note that the return result of `art` is identical to that of `f_nway`.
 
 Another important thing to note here is that just like with `f_nway`, you should **NOT** use `art` for handling Two Way designs (i.e. Two Way ANOVA). Use `anovapy.twoway.art` which is optimized for handling Two Way designs.
+
+Just as there is ART ANOVA implemented, the ART-C post-hoc test is also implemented. It mirrors the `tukey_hsd` signature and you can make calls to it as follows:
+
+```python
+from anovapy.nway import artc
+
+res = artc(program, gender, division, dependent=height, term=(0,))
+
+for comp, t_stat, p_val in zip(
+    res_main.comparisons, res_main.statistic, res_main.pvalue
+):
+    print(f"For comparison {comp}: t-Statistic = {t_stat:.3f}, p-value = {p_val:.4f}")
+
+# or test other effects/interactions
+
+res2 = artc(
+    program, gender, division, dependent=height, term=(0, 1)
+)  # tests interaction program (0) and gender (1)
+
+res3 = artc(
+    program, gender, division, dependent=height, term=(0, 1, 2)
+)  # tests interaction between program (0) : gender (1) : division (2)
+```
+
+## Permutation N-Way ANOVA
+
+In case assumptions are not met, AnovaPy also supports running a Permutation N-Way ANOVA. This can be achieved as follows:
+
+```python
+from anovapy.nway import f_permutation
+
+res = f_permutation(program, gender, division, dependent=height)
+
+# do something with res
+```
+
+The return result of `res` is identical to that of `f_nway`. It also has some parameters you can mess around with, more specifically:
+
+- `permutations` -> controls number of permutations to run. Defaults to 999
+- `random_state` -> A seed to set for reproducability
+- `method` -> The method to use for permuting the data. Options are `'manly'` (Manly), `'edgington'` (Edgington), and `'braak'` (ter Braak). Defaults to `'manly'`. For a full break down of the differences between each method see the doc string of `anovapy.twoway.f_permutation` (also uses the same exact methods) which provides an excellent comparison.
+
+The below example demonstrates each use:
+
+```python
+res_perm = f_permutation(program, gender, division, dependent=height, permutations=9999)
+
+res_seed = f_permutation(program, gender, division, dependent=height, random_state=42)
+
+res_method = f_permutation(program, gender, division, dependent=height, method="braak")
+```
